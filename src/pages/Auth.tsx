@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { Avatar, FullLogo, Lockup } from '@/components/common';
 import { cn } from '@/lib/utils';
+import { joinByCode } from '@/lib/actions';
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
@@ -220,6 +221,39 @@ export function AcceptInvite({ signedIn }: { signedIn?: boolean }) {
           {err && <p className="mt-3 text-sm text-red-600">{err}</p>}
         </>
       )}
+    </Shell>
+  );
+}
+
+/** /join/:code — a shareable join link. Signed-in users join straight away; others create an account (the code is remembered through sign-up, Google sign-in or login). */
+export function JoinByCode({ signedIn }: { signedIn?: boolean }) {
+  const { code = '' } = useParams();
+  const nav = useNavigate();
+  const [err, setErr] = useState('');
+  const clean = code.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+  useEffect(() => {
+    if (!signedIn) { try { localStorage.setItem('nv-pending-code', clean); } catch {} return; }
+    (async () => {
+      try { const me = await auth.current(); if (!me) throw new Error('Please sign in first'); const cid = await joinByCode(me, clean); nav(`/app/classes/${cid}`, { replace: true }); }
+      catch (e: any) { setErr(e.message || 'Could not join'); }
+    })();
+  }, [signedIn, clean, nav]);
+  return (
+    <Shell>
+      <GraduationCap className="mb-4 size-10 text-lavender-deep" />
+      <h1 className="text-2xl font-bold">Join a classroom</h1>
+      <p className="mt-2 text-sm text-muted-foreground">Classroom code <b className="font-mono tracking-widest text-foreground">{clean}</b></p>
+      {signedIn ? (err ? <p className="mt-4 text-sm text-red-600" role="alert">{err}</p> : <Loader2 className="mt-6 animate-spin text-lavender-deep" />) : (
+        <>
+          <div className="mt-6 flex flex-wrap gap-2">
+            <Button asChild><Link to={`/register?role=student&code=${clean}`}>Create account & join</Link></Button>
+            <Button asChild variant="outline"><Link to="/login">I already have an account</Link></Button>
+          </div>
+          <div className="mt-6"><GoogleButton label="Continue with Google" /></div>
+          <p className="mt-2 text-xs text-muted-foreground">We’ll add you to the classroom as soon as you’re signed in.</p>
+        </>
+      )}
+      {err && !signedIn && <p className="mt-3 text-sm text-red-600">{err}</p>}
     </Shell>
   );
 }

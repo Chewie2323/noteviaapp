@@ -4,7 +4,7 @@ import { NotebookPen, Upload, FolderPlus, GraduationCap, Link2, PenLine, ArrowRi
 import { useApp, ask } from '@/lib/app';
 import { useLocalState, useTable } from '@/lib/hooks';
 import { db } from '@/lib/backend';
-import type { ActivityLog, Assignment, CalendarEvent, Classroom, DocumentRow, Folder, Notebook, RecentItem, ResourceLink, Submission } from '@/lib/types';
+import type { Flashcard, ActivityLog, Assignment, CalendarEvent, Classroom, DocumentRow, Folder, Notebook, RecentItem, ResourceLink, Submission } from '@/lib/types';
 import { createFolder, createNotebook, createWhiteboard } from '@/lib/actions';
 import { DocCard, FolderCard, NotebookCard } from '@/components/Cards';
 import { Empty, ViewToggle } from '@/components/common';
@@ -29,6 +29,7 @@ export default function Home() {
   const { rows: events } = useTable<CalendarEvent>('calendar_events', undefined, { col: 'starts_at', asc: true });
   const { rows: classes } = useTable<Classroom>('classrooms');
   const { rows: links } = useTable<ResourceLink>('resource_links');
+  const { rows: myCards } = useTable<Flashcard>('flashcards', { owner_id: app.user.id });
   const { rows: activity } = useTable<ActivityLog>('activity_logs', undefined, { col: 'created_at' });
 
   const visDocs = docs.filter((d) => !d.deleted_at && app.can('document', d));
@@ -45,6 +46,14 @@ export default function Home() {
   const sharedLinks = links.filter((l) => l.owner_id !== app.user.id && app.can('link', l)).slice(0, 4);
   const sharedDocs = visDocs.filter((d) => d.owner_id !== app.user.id).slice(0, 4);
   const upcomingClasses = events.filter((e) => (e.kind === 'class' || e.kind === 'meeting') && new Date(e.ends_at) > new Date() && (e.owner_id === app.user.id || (e.classroom_id && app.classIds.has(e.classroom_id)))).slice(0, 4);
+  const mySubs = subs.filter((x) => x.student_id === app.user.id);
+  const subFor = (aid: string) => mySubs.find((x) => x.assignment_id === aid);
+  const dueNow = assignments.filter((a) => app.classIds.has(a.classroom_id) && (!a.assignee_ids.length || a.assignee_ids.includes(app.user.id)) && ['in_progress', undefined].includes(subFor(a.id)?.status as any))
+    .sort((a, b) => +new Date(a.due_at) - +new Date(b.due_at)).slice(0, 4);
+  const returned = mySubs.filter((x) => x.status === 'returned' || x.status === 'completed').sort((a, b) => +new Date(b.updated_at) - +new Date(a.updated_at)).slice(0, 3)
+    .map((x) => ({ x, a: assignments.find((a) => a.id === x.assignment_id) })).filter((r) => r.a);
+  const nextUp = events.filter((e) => new Date(e.ends_at) > new Date() && new Date(e.starts_at).getTime() < Date.now() + 86400000 * 2 && (e.owner_id === app.user.id || (e.classroom_id && app.classIds.has(e.classroom_id)))).slice(0, 3);
+  const cardsDue = myCards.filter((c) => new Date(c.due_at).getTime() <= Date.now()).length;
   const feed = activity.filter((a) => a.actor_id === app.user.id || (a.classroom_id && app.classIds.has(a.classroom_id))).slice(0, 8);
 
   const myClassCount = classes.filter((c) => app.classIds.has(c.id)).length;
@@ -85,6 +94,23 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {!isTeacher && (
+        <section aria-label="Today" className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-4">
+          <TodayCard title="Due" tone="#FDE3D6" to="/app/assignments" empty="Nothing due — nice.">
+            {dueNow.map((a) => { const late = new Date(a.due_at) < new Date(); return <div key={a.id} className="flex justify-between gap-2 text-sm"><Link to={`/app/assignments/${a.id}`} className="truncate hover:underline">{a.title}</Link><span className={cn('shrink-0 text-xs', late ? 'font-medium text-red-700' : 'text-charcoal/70')}>{late ? 'Overdue' : fmtDate(a.due_at)}</span></div>; })}
+          </TodayCard>
+          <TodayCard title="Next up" tone="#D6E7F8" to="/app/calendar" empty="No events in the next two days.">
+            {nextUp.map((e) => <div key={e.id} className="flex justify-between gap-2 text-sm"><span className="truncate">{e.title}</span><span className="shrink-0 text-xs text-charcoal/70">{fmtDate(e.starts_at)} {e.all_day ? '' : fmtTime(e.starts_at)}</span></div>)}
+          </TodayCard>
+          <TodayCard title="Returned" tone="#D5ECE3" to="/app/assignments" empty="No marked work yet.">
+            {returned.map(({ x, a }) => <div key={x.id} className="flex justify-between gap-2 text-sm"><Link to={`/app/assignments/${a!.id}`} className="truncate hover:underline">{a!.title}</Link><span className="shrink-0 text-xs text-charcoal/70">{STATUS_LABEL[x.status]}</span></div>)}
+          </TodayCard>
+          <TodayCard title="Study" tone="#E4DDFB" to="/app/study" empty="No cards yet — make a deck from your notes.">
+            {myCards.length > 0 && <div><div className="text-3xl font-bold">{cardsDue}</div><div className="text-xs text-charcoal/70">card{cardsDue === 1 ? '' : 's'} to review today</div></div>}
+          </TodayCard>
+        </section>
+      )}
 
       <div className="grid grid-cols-2 gap-3.5 lg:grid-cols-4">
         {stats.map((x) => (
@@ -179,5 +205,15 @@ export function Section({ title, to, children, action }: { title: string; to?: s
         <div className="flex items-center gap-2">{action}{to && <Link to={to} className={cn('inline-flex items-center gap-1 text-xs font-medium text-lavender-ink transition-all hover:gap-1.5 dark:text-lavender')}>View all <ArrowRight className="size-3.5" /></Link>}</div></div>
       {children}
     </section>
+  );
+}
+
+function TodayCard({ title, tone, to, empty, children }: { title: string; tone: string; to: string; empty: string; children?: React.ReactNode }) {
+  const items = (Array.isArray(children) ? children : [children]).filter(Boolean).flat();
+  return (
+    <div className="flex min-h-[132px] flex-col rounded-2xl p-4 text-charcoal" style={{ background: tone }}>
+      <Link to={to} className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide">{title}<ArrowRight className="size-3.5" /></Link>
+      {items.length ? <div className="space-y-1.5">{items}</div> : <p className="text-sm text-charcoal/70">{empty}</p>}
+    </div>
   );
 }

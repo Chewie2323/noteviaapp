@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Users, Star, Download, Trash2, RotateCcw, Settings as SettingsIcon, ShieldCheck, Moon, Sun, PenTool, Database, FileJson, UserX, Sparkles, KeyRound, ExternalLink, Folder as FolderIcon, Link2, Timer } from 'lucide-react';
+import { Users, Star, Download, Trash2, RotateCcw, Settings as SettingsIcon, ShieldCheck, Moon, Sun, PenTool, Database, FileJson, UserX, Sparkles, KeyRound, ExternalLink, Folder as FolderIcon, Link2, Timer, Bell } from 'lucide-react';
 import { useApp, ask } from '@/lib/app';
 import { useTable } from '@/lib/hooks';
 import { auth, db, fn, MODE, resetDemo, STORAGE_LIMIT_BYTES, AI_ENABLED } from '@/lib/backend';
@@ -171,6 +171,7 @@ export function SettingsPage() {
           <div className="rounded-2xl border border-border bg-card px-6 py-2">
             <Row icon={app.dark ? <Moon /> : <Sun />} title="Dark mode" desc="Switch between light and dark appearance"><Switch checked={app.dark} onCheckedChange={app.setDark} aria-label="Dark mode" /></Row>
             <Row icon={<PenTool />} title="Stylus-only drawing (palm rejection)" desc="Only Apple Pencil or a stylus writes; fingers scroll and pinch"><Switch checked={!!settings.pencil_only} onCheckedChange={(v) => setSetting({ pencil_only: v })} aria-label="Stylus only" /></Row>
+            <Row icon={<Bell />} title="Email reminders" desc="Due-soon and feedback emails (in-app notifications always stay on)"><Switch checked={settings.email_notifications !== false} onCheckedChange={(v) => setSetting({ email_notifications: v })} aria-label="Email reminders" /></Row>
             <Row icon={<Database />} title="Storage" desc={`${formatBytes(used)} of ${formatBytes(STORAGE_LIMIT_BYTES)} used`}><div className="w-40"><Progress value={(used / STORAGE_LIMIT_BYTES) * 100} /></div></Row>
           </div>
         </TabsContent>

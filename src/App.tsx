@@ -7,7 +7,7 @@ import { Layout } from '@/components/Layout';
 import { FullLogo } from '@/components/common';
 import { Button } from '@/components/ui/button';
 import Landing from '@/pages/Landing';
-import { Login, Register, ResetPassword, AcceptInvite } from '@/pages/Auth';
+import { Login, Register, ResetPassword, AcceptInvite, JoinByCode } from '@/pages/Auth';
 import { Privacy, Terms, Contact } from '@/pages/Legal';
 import Home from '@/pages/Home';
 import Workspace from '@/pages/Workspace';
@@ -20,6 +20,7 @@ import Calendar from '@/pages/Calendar';
 import { SharedWithMe, Favourites, Downloads, RecycleBin, SettingsPage } from '@/pages/Personal';
 import Admin from '@/pages/Admin';
 import Assistant from '@/pages/Assistant';
+import Study, { StudyDeck } from '@/pages/Study';
 
 const NotebookEditor = lazy(() => import('@/pages/NotebookEditor'));
 const WhiteboardEditor = lazy(() => import('@/pages/WhiteboardEditor'));
@@ -68,6 +69,7 @@ function Inner() {
       <Route path="/register" element={user ? <Navigate to="/app" replace /> : <Register />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/invite/:token" element={user ? <AppProvider user={user}><AcceptInvite signedIn /></AppProvider> : <AcceptInvite />} />
+      <Route path="/join/:code" element={user ? <AppProvider user={user}><JoinByCode signedIn /></AppProvider> : <JoinByCode />} />
       <Route path="/privacy" element={<Privacy />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/contact" element={<Contact />} />
@@ -90,6 +92,8 @@ function Inner() {
         <Route path="shared" element={<SharedWithMe />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="assistant" element={<Assistant />} />
+        <Route path="study" element={<Study />} />
+        <Route path="study/:id" element={<StudyDeck />} />
         <Route path="favourites" element={<Favourites />} />
         <Route path="downloads" element={<Downloads />} />
         <Route path="bin" element={<RecycleBin />} />

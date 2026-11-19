@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight, PenTool, FileText, GraduationCap, Columns2, Sparkles, ShieldCheck, Share2, CalendarDays, NotebookPen, Highlighter,
   Eraser, Undo2, Users, BriefcaseBusiness, BookOpenCheck, Moon, Sun, Check, Lock, Shapes, Folder, Home, Search, Bell,
@@ -23,6 +23,8 @@ const PREVIEW: CanvasObject[] = [
 ];
 
 export default function Landing() {
+  const navigate = useNavigate();
+  const [joinCode, setJoinCode] = useState('');
   const [dark, setDark] = useTheme();
   const [objs, setObjs] = useState<CanvasObject[]>(PREVIEW);
   const [sel, setSel] = useState<string[]>([]);
@@ -80,6 +82,10 @@ export default function Landing() {
               <Button asChild size="lg"><Link to="/register">Get started — it’s free <ArrowRight /></Link></Button>
               <Button asChild size="lg" variant="outline"><Link to="/login">Sign in</Link></Button>
             </div>
+            <form className="mt-6 flex max-w-sm gap-2" onSubmit={(e) => { e.preventDefault(); const c = joinCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''); if (c.length >= 5) navigate(`/join/${c}`); }}>
+              <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} maxLength={10} aria-label="Classroom code" placeholder="Have a classroom code?" className="h-11 flex-1 rounded-xl border border-border bg-card px-4 text-sm uppercase tracking-widest placeholder:normal-case placeholder:tracking-normal focus:outline-none focus:ring-2 focus:ring-lavender/40" />
+              <Button type="submit" variant="secondary" size="lg" disabled={joinCode.trim().length < 5}>Join</Button>
+            </form>
             <div className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
               {['Private by default', 'Works on iPad & stylus', 'Any subject, any level'].map((s) => <span key={s} className="flex items-center gap-1.5"><Check className="size-4 text-[#3F9A72]" />{s}</span>)}
             </div>

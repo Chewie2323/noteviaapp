@@ -6,6 +6,7 @@ export interface UserSettings {
   retention_days?: number;       // recycle-bin auto-purge
   ai_consent?: boolean;          // permission to send content to the configured AI provider
   pencil_only?: boolean;         // palm rejection: only stylus draws
+  email_notifications?: boolean; // email reminders (default on)
   default_view?: 'grid' | 'list';
 }
 export interface Profile {
@@ -107,4 +108,10 @@ export type TableName =
   | 'profiles' | 'workspaces' | 'folders' | 'documents' | 'notebooks' | 'notebook_pages' | 'templates' | 'annotations'
   | 'classrooms' | 'classroom_members' | 'announcements' | 'invitations' | 'resource_links' | 'assignments' | 'submissions'
   | 'feedback' | 'calendar_events' | 'tasks' | 'notifications' | 'shares' | 'comments' | 'activity_logs' | 'versions'
-  | 'favourites' | 'recent_items' | 'downloads' | 'platform_settings';
+  | 'favourites' | 'recent_items' | 'downloads' | 'platform_settings' | 'flashcard_decks' | 'flashcards';
+
+export interface FlashcardDeck { id: string; owner_id: string; title: string; color: string; notebook_id?: string | null; created_at: string }
+export interface Flashcard {
+  id: string; deck_id: string; owner_id: string; front: string; back: string; ease: number; interval_days: number; repetitions: number;
+  due_at: string; last_reviewed_at?: string | null; created_at: string;
+}

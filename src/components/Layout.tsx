@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home, LayoutGrid, NotebookPen, FileText, GraduationCap, Link2, ClipboardCheck, Users, CalendarDays, Star, Download, Trash2, Settings,
-  Search, Bell, Sparkles, PenTool, HelpCircle, Moon, Sun, ChevronsLeft, ChevronsRight, Menu, LogOut, UserRound, ShieldCheck, X, Plus, PenLine, Keyboard, BookOpen, Mail,
+  Search, Bell, Sparkles, PenTool, Layers, HelpCircle, Moon, Sun, ChevronsLeft, ChevronsRight, Menu, LogOut, UserRound, ShieldCheck, X, Plus, PenLine, Keyboard, BookOpen, Mail,
 } from 'lucide-react';
 import { useApp } from '@/lib/app';
 import { auth, db, MODE } from '@/lib/backend';
@@ -16,6 +16,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/
 import { Button } from '@/components/ui/button';
 import { cn, timeAgo } from '@/lib/utils';
 import { SUPPORT_EMAIL } from '@/lib/config';
+import { joinByCode } from '@/lib/actions';
 
 export const NAV = [
   { to: '/app', label: 'Home', icon: Home, end: true },
@@ -29,6 +30,7 @@ export const NAV = [
   { to: '/app/shared', label: 'Shared with Me', icon: Users },
   { to: '/app/calendar', label: 'Calendar', icon: CalendarDays },
   { to: '/app/assistant', label: 'AI Assistant', icon: Sparkles },
+  { to: '/app/study', label: 'Study', icon: Layers },
   { to: '/app/favourites', label: 'Favourites', icon: Star },
   { to: '/app/downloads', label: 'Downloads', icon: Download },
   { to: '/app/bin', label: 'Recycle Bin', icon: Trash2 },
@@ -43,6 +45,13 @@ export function Layout() {
   const [drawer, setDrawer] = useState(false);
   const [help, setHelp] = useState(false);
   useEffect(() => setDrawer(false), [loc.pathname]);
+  const navTo = useNavigate();
+  useEffect(() => {
+    let code = ''; try { code = localStorage.getItem('nv-pending-code') || ''; } catch {}
+    if (!code) return;
+    try { localStorage.removeItem('nv-pending-code'); } catch {}
+    joinByCode(app.user, code).then((cid) => { app.toast('You’ve joined the classroom'); navTo(`/app/classes/${cid}`); }).catch(() => {});
+  }, [app.user.id]);
   const { rows: ps } = useTable<any>('platform_settings');
   const notice = ps[0]?.notice as string | undefined;
   const immersive = /^\/app\/(notebooks|whiteboards|pdf|pages)\/[^/]+|^\/app\/split/.test(loc.pathname);

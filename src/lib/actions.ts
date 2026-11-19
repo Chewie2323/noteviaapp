@@ -1,6 +1,7 @@
-import { db, now, uid, STORAGE_LIMIT_BYTES } from './backend';
-import type { DocumentRow, Folder, Notebook, NotebookPage, Orientation, PaperSize, Profile, TemplateId } from './types';
+import { db, now, uid, supabase, STORAGE_LIMIT_BYTES } from './backend';
+import type { Flashcard, FlashcardDeck, Classroom, ClassroomMember, DocumentRow, Folder, Notebook, NotebookPage, Orientation, PaperSize, Profile, TemplateId } from './types';
 import { PASTELS, guessMime, safeName } from './utils';
+import { quiz } from './localAI';
 
 export async function createNotebook(user: Profile, o: Partial<Notebook> & { title?: string } = {}) {
   const nb = await db.insert<Notebook>('notebooks', {
@@ -103,3 +104,42 @@ export async function exportMyData(user: Profile) {
   data.note = 'Uploaded files are listed in "documents" (storage_path). Download them individually from Documents.';
   return new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
 }
+
+/** Join a classroom by its code (Supabase RPC, or local demo store). Returns the classroom id. */
+export async function joinByCode(user: Profile, raw: string): Promise<string> {
+  const c = raw.trim().toUpperCase();
+  if (supabase) return db.rpc<string>('join_classroom', { p_code: c });
+  const cls = (await db.list<Classroom>('classrooms')).find((x) => x.join_code === c && !x.archived);
+  if (!cls) throw new Error('Classroom code not recognised');
+  if (cls.owner_id !== user.id && !(await db.list<ClassroomMember>('classroom_members', { classroom_id: cls.id, user_id: user.id })).length)
+    await db.insert('classroom_members', { classroom_id: cls.id, user_id: user.id, role: 'student', progress: 0 });
+  return cls.id;
+}
+
+/** Spaced repetition (simplified SM-2). grade: 0 again · 1 hard · 2 good · 3 easy. */
+export function schedule(c: Pick<Flashcard, 'ease' | 'interval_days' | 'repetitions'>, grade: 0 | 1 | 2 | 3) {
+  let { ease, interval_days: iv, repetitions: reps } = c;
+  const due = new Date();
+  if (grade === 0) { reps = 0; iv = 0; ease = Math.max(1.3, ease - 0.2); due.setMinutes(due.getMinutes() + 10); }
+  else {
+    if (grade === 1) { iv = Math.max(1, Math.round(iv * 1.2)); ease = Math.max(1.3, ease - 0.15); }
+    else if (reps === 0) iv = grade === 3 ? 4 : 1;
+    else if (reps === 1) iv = grade === 3 ? 7 : 3;
+    else iv = Math.max(iv + 1, Math.round(iv * ease * (grade === 3 ? 1.3 : 1)));
+    if (grade === 3) ease += 0.15;
+    reps += 1;
+    due.setDate(due.getDate() + iv);
+  }
+  return { ease: Math.round(ease * 100) / 100, interval_days: iv, repetitions: reps, due_at: due.toISOString(), last_reviewed_at: now() };
+}
+
+export async function createDeck(user: Profile, title: string, cards: { front: string; back: string }[] = [], extra: Partial<FlashcardDeck> = {}) {
+  const deck = await db.insert<FlashcardDeck>('flashcard_decks', { owner_id: user.id, title: title.trim().slice(0, 200) || 'Untitled deck', color: PASTELS[Math.floor(Math.random() * 6)], ...extra });
+  for (const c of cards) await addCard(user, deck.id, c.front, c.back);
+  return deck;
+}
+export const addCard = (user: Profile, deckId: string, front: string, back: string) =>
+  db.insert<Flashcard>('flashcards', { deck_id: deckId, owner_id: user.id, front: front.trim().slice(0, 2000), back: back.trim().slice(0, 4000), ease: 2.5, interval_days: 0, repetitions: 0, due_at: now() });
+
+/** Draft flashcards from study text with the on-device helper (the student edits them afterwards). */
+export const cardsFromText = (text: string, count = 10) => quiz(text, count).map((q) => ({ front: q.q, back: q.a }));
