@@ -19,6 +19,7 @@ import Assignments, { AssignmentDetail } from '@/pages/Assignments';
 import Calendar from '@/pages/Calendar';
 import { SharedWithMe, Favourites, Downloads, RecycleBin, SettingsPage } from '@/pages/Personal';
 import Admin from '@/pages/Admin';
+import Assistant from '@/pages/Assistant';
 
 const NotebookEditor = lazy(() => import('@/pages/NotebookEditor'));
 const WhiteboardEditor = lazy(() => import('@/pages/WhiteboardEditor'));
@@ -88,6 +89,7 @@ function Inner() {
         <Route path="assignments/:id" element={<AssignmentDetail />} />
         <Route path="shared" element={<SharedWithMe />} />
         <Route path="calendar" element={<Calendar />} />
+        <Route path="assistant" element={<Assistant />} />
         <Route path="favourites" element={<Favourites />} />
         <Route path="downloads" element={<Downloads />} />
         <Route path="bin" element={<RecycleBin />} />

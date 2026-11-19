@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Home, LayoutGrid, NotebookPen, FileText, GraduationCap, Link2, ClipboardCheck, Users, CalendarDays, Star, Download, Trash2, Settings,
-  Search, Bell, HelpCircle, Moon, Sun, ChevronsLeft, ChevronsRight, Menu, LogOut, UserRound, ShieldCheck, X, Plus, PenLine, Keyboard, BookOpen, Mail,
+  Search, Bell, Sparkles, PenTool, HelpCircle, Moon, Sun, ChevronsLeft, ChevronsRight, Menu, LogOut, UserRound, ShieldCheck, X, Plus, PenLine, Keyboard, BookOpen, Mail,
 } from 'lucide-react';
 import { useApp } from '@/lib/app';
 import { auth, db, MODE } from '@/lib/backend';
@@ -21,12 +21,14 @@ export const NAV = [
   { to: '/app', label: 'Home', icon: Home, end: true },
   { to: '/app/workspace', label: 'My Workspace', icon: LayoutGrid },
   { to: '/app/notebooks', label: 'My Notebooks', icon: NotebookPen },
+  { to: '/app/whiteboards', label: 'Whiteboards', icon: PenTool },
   { to: '/app/documents', label: 'Documents', icon: FileText },
   { to: '/app/classes', label: 'My Classes', icon: GraduationCap },
   { to: '/app/resources', label: 'Learning Resources', icon: Link2 },
   { to: '/app/assignments', label: 'Assignments', icon: ClipboardCheck },
   { to: '/app/shared', label: 'Shared with Me', icon: Users },
   { to: '/app/calendar', label: 'Calendar', icon: CalendarDays },
+  { to: '/app/assistant', label: 'AI Assistant', icon: Sparkles },
   { to: '/app/favourites', label: 'Favourites', icon: Star },
   { to: '/app/downloads', label: 'Downloads', icon: Download },
   { to: '/app/bin', label: 'Recycle Bin', icon: Trash2 },
@@ -152,7 +154,7 @@ function Topbar({ onMenu, onHelp }: { onMenu: () => void; onHelp: () => void }) 
 }
 
 function MobileNav({ onMore }: { onMore: () => void }) {
-  const items = [NAV[0], NAV[2], NAV[3], NAV[4], NAV[8]];
+  const items = ['/app', '/app/notebooks', '/app/documents', '/app/classes', '/app/calendar'].map((to) => NAV.find((n) => n.to === to)!);
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden" aria-label="Mobile">
       {items.map((n) => (
