@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Shape, Rect, Ellipse, Line, Arrow, Group, Text, Label, Tag, Image as KImage, Transformer } from 'react-konva';
 import type Konva from 'konva';
 import { nanoid } from 'nanoid';
@@ -36,6 +36,7 @@ interface Props {
   mode?: 'page' | 'board';
   width: number; height: number;          // page: logical page size · board: viewport size in CSS px
   zoom?: number;                            // page mode
+  onZoom?: (z: number) => void;             // page mode: pinch / ctrl+wheel zoom
   view?: View; onView?: (v: View) => void;  // board mode
   objects: CanvasObject[];
   onCommit: (objs: CanvasObject[]) => void;
@@ -62,10 +63,17 @@ const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 function strokeHit(o: StrokeObj, px: number, py: number, r: number) {
   const sx = o.scaleX ?? 1, sy = o.scaleY ?? 1, rot = ((o.rotation || 0) * Math.PI) / 180, cos = Math.cos(rot), sin = Math.sin(rot);
   const rr = r + o.size / 2;
+  let lx0 = 0, ly0 = 0;
   for (let i = 0; i < o.points.length; i += 3) {
     const lx = o.points[i] * sx, ly = o.points[i + 1] * sy;
     const x = o.x + lx * cos - ly * sin, y = o.y + lx * sin + ly * cos;
-    if ((x - px) ** 2 + (y - py) ** 2 <= rr * rr) return true;
+    if (i > 0) {   // test the segment, not just the vertices, so quick strokes can't slip through
+      const dx = x - lx0, dy = y - ly0, len2 = dx * dx + dy * dy;
+      const t = len2 ? clamp(((px - lx0) * dx + (py - ly0) * dy) / len2, 0, 1) : 0;
+      const cx = lx0 + t * dx - px, cy = ly0 + t * dy - py;
+      if (cx * cx + cy * cy <= rr * rr) return true;
+    } else if ((x - px) ** 2 + (y - py) ** 2 <= rr * rr) return true;
+    lx0 = x; ly0 = y;
   }
   return false;
 }
@@ -96,13 +104,17 @@ export function InkCanvas(p: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const drawing = useRef<any>(null);
   const pointers = useRef(new Map<number, { x: number; y: number; type: string }>());
-  const gesture = useRef<{ dist: number; cx: number; cy: number; view: View } | null>(null);
+  const gesture = useRef<{ dist: number; cx: number; cy: number; view: View; sl?: number; st?: number; rl?: number; rt?: number } | null>(null);
   const penActive = useRef(false);
   // multi-finger tap tracking (two fingers = undo, three = redo)
   const tapG = useRef<{ t0: number; max: number; moved: boolean; start: Map<number, { x: number; y: number }> } | null>(null);
   const pendingStart = useRef<any>(null);
   const tapOn = p.tapUndo !== false && !p.readOnly && !!p.onUndo;
   const [erasing, setErasing] = useState<Set<string>>(new Set());
+  const erased = useRef<Set<string>>(new Set());
+  const lastErase = useRef<{ x: number; y: number } | null>(null);
+  const objsRef = useRef(objects); objsRef.current = objects;
+  const pendingScroll = useRef<{ l: number; t: number } | null>(null);
   const [ghost, setGhost] = useState<CanvasObject | null>(null);
   const [band, setBand] = useState<number[] | null>(null);
   const [editing, setEditing] = useState<{ id: string; r?: number; c?: number } | null>(null);
@@ -157,12 +169,35 @@ export function InkCanvas(p: Props) {
     return () => el.removeEventListener('wheel', h);
   }, [board, p.view, p.onView]);
 
+  useLayoutEffect(() => {
+    const s = pendingScroll.current; if (!s) return;
+    pendingScroll.current = null;
+    const sc = wrap.current?.closest('[data-scroll]') as HTMLElement | null;
+    if (sc) { sc.scrollLeft = s.l; sc.scrollTop = s.t; }
+  }, [p.zoom]);
+
+  // page mode: ctrl/cmd + wheel (and trackpad pinch) zooms
+  useEffect(() => {
+    if (board || !p.onZoom) return;
+    const el = wrap.current; if (!el) return;
+    const h = (e: WheelEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      e.preventDefault();
+      const z0 = p.zoom || 1, ns = clamp(+(z0 * Math.pow(0.99, e.deltaY)).toFixed(3), 0.3, 4);
+      const sc = el.closest('[data-scroll]') as HTMLElement | null, r = el.getBoundingClientRect();
+      if (sc) pendingScroll.current = { l: sc.scrollLeft + ((e.clientX - r.left) / z0) * (ns - z0), t: sc.scrollTop + ((e.clientY - r.top) / z0) * (ns - z0) };
+      p.onZoom!(ns);
+    };
+    el.addEventListener('wheel', h, { passive: false });
+    return () => el.removeEventListener('wheel', h);
+  }, [board, p.zoom, p.onZoom]);
+
   const pos = () => layer.current!.getRelativePointerPosition()!;
   const evPressure = (e: PointerEvent) => (e.pointerType === 'pen' ? clamp(e.pressure || 0.5, 0.05, 1) : -1);
 
   const cancelDrawing = () => {
     drawing.current = null; live.current?.visible(false); live.current?.getLayer()?.batchDraw();
-    setBand(null); setGhost(null); setErasing(new Set());
+    setBand(null); setGhost(null); setErasing(new Set()); erased.current = new Set(); lastErase.current = null;
   };
 
   const onDown = (e: Konva.KonvaEventObject<PointerEvent>) => {
@@ -177,14 +212,15 @@ export function InkCanvas(p: Props) {
       else if (tapG.current && now - tapG.current.t0 < 350) {
         tapG.current.max = Math.max(tapG.current.max, touches); tapG.current.start.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
         clearTimeout(pendingStart.current); cancelDrawing();   // the first finger was the start of a gesture, not a mark
-        if (!board) return;
+        if (!board && !p.onZoom) return;
       } else tapG.current = null;
     } else tapG.current = null;
     // two-finger pan / pinch on boards
-    if (board && pointers.current.size === 2) {
-      drawing.current = null; live.current?.visible(false); setBand(null); setGhost(null);
+    if ((board || p.onZoom) && pointers.current.size === 2 && Array.from(pointers.current.values()).every((v) => v.type === 'touch' || board)) {
+      drawing.current = null; live.current?.visible(false); setBand(null); setGhost(null); setErasing(new Set()); erased.current = new Set();
       const [a, b] = Array.from(pointers.current.values());
-      gesture.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, view: { ...view } };
+      const sc = wrap.current?.closest('[data-scroll]') as HTMLElement | null;
+      gesture.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, view: { ...view }, sl: sc?.scrollLeft ?? 0, st: sc?.scrollTop ?? 0, rl: wrap.current?.getBoundingClientRect().left ?? 0, rt: wrap.current?.getBoundingClientRect().top ?? 0 };
       return;
     }
     if (readOnly) return;
@@ -212,7 +248,7 @@ export function InkCanvas(p: Props) {
       l.setAttr('nvStroke', { id: 'live', type: 'stroke', pen, x: 0, y: 0, points: drawing.current.points, color: tools.colors[pen], size: tools.sizes[pen], opacity: pen === 'highlighter' ? PEN_DEFAULTS.highlighter.opacity : tools.opacity * PEN_DEFAULTS[pen].opacity });
       l.visible(true); l.getLayer()?.batchDraw();
     } else if (t === 'eraser') {
-      drawing.current = { kind: 'eraser' }; eraseAt(pt.x, pt.y);
+      drawing.current = { kind: 'eraser' }; erased.current = new Set(); lastErase.current = null; eraseAt(pt.x, pt.y);
     } else if (t === 'lasso' || (t === 'select' && !onObject)) {
       if (onObject && t === 'lasso') return;
       if (e.target.getParent()?.className === 'Transformer') return;
@@ -243,9 +279,20 @@ export function InkCanvas(p: Props) {
     }
   };
 
+  // Drag-erase: sweep a path from the last position to this one so fast drags don't skip strokes
   const eraseAt = (x: number, y: number) => {
-    const hit = objects.filter((o) => o.type === 'stroke' && !erasing.has(o.id) && strokeHit(o, x, y, tools.eraserSize));
-    if (hit.length) setErasing((s) => { const n = new Set(s); hit.forEach((h) => n.add(h.id)); return n; });
+    const prev = lastErase.current; lastErase.current = { x, y };
+    const r = tools.eraserSize;
+    const steps = prev ? Math.max(1, Math.ceil(Math.hypot(x - prev.x, y - prev.y) / Math.max(2, r * 0.5))) : 1;
+    let changed = false;
+    for (const o of objsRef.current) {
+      if (o.type !== 'stroke' || erased.current.has(o.id)) continue;
+      for (let i = 1; i <= steps; i++) {
+        const px = prev ? prev.x + ((x - prev.x) * i) / steps : x, py = prev ? prev.y + ((y - prev.y) * i) / steps : y;
+        if (strokeHit(o as StrokeObj, px, py, r)) { erased.current.add(o.id); changed = true; break; }
+      }
+    }
+    if (changed) setErasing(new Set(erased.current));
   };
 
   const onMove = (e: Konva.KonvaEventObject<PointerEvent>) => {
@@ -257,6 +304,15 @@ export function InkCanvas(p: Props) {
       const [a, b] = Array.from(pointers.current.values());
       const g = gesture.current, d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
       const r = wrap.current!.getBoundingClientRect();
+      if (!board) {   // page: pinch zooms, two-finger drag scrolls, anchored on the pinch centre
+        const z0 = g.view.scale, nz = clamp(+(z0 * (d / (g.dist || 1))).toFixed(3), 0.3, 4);
+        const sc = wrap.current?.closest('[data-scroll]') as HTMLElement | null;
+        const l = (g.sl ?? 0) + ((g.cx - (g.rl ?? 0)) / z0) * (nz - z0) + (g.cx - cx);
+        const t = (g.st ?? 0) + ((g.cy - (g.rt ?? 0)) / z0) * (nz - z0) + (g.cy - cy);
+        if (Math.abs(nz - (p.zoom || 1)) > 0.001) { pendingScroll.current = { l, t }; p.onZoom?.(nz); }
+        else if (sc) { sc.scrollLeft = l; sc.scrollTop = t; }
+        return;
+      }
       const ns = clamp(g.view.scale * (d / (g.dist || 1)), 0.1, 5);
       const px = g.cx - r.left, py = g.cy - r.top;
       p.onView?.({ scale: ns, x: px - ((px - g.view.x) / g.view.scale) * ns + (cx - g.cx), y: py - ((py - g.view.y) / g.view.scale) * ns + (cy - g.cy) });
@@ -324,8 +380,9 @@ export function InkCanvas(p: Props) {
       };
       p.onCommit([...objects, stroke]);
     } else if (d.kind === 'eraser') {
-      if (erasing.size) p.onCommit(objects.filter((o) => !erasing.has(o.id)));
-      setErasing(new Set());
+      const gone = erased.current;
+      if (gone.size) p.onCommit(objects.filter((o) => !gone.has(o.id)));
+      erased.current = new Set(); lastErase.current = null; setErasing(new Set());
     } else if (d.kind === 'lasso' || d.kind === 'select') {
       const l = layer.current!;
       const poly = d.kind === 'lasso' ? d.points : null;

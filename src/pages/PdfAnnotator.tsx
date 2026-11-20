@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { nanoid } from 'nanoid';
 import {
   ArrowLeft, Download, FilePlus2, Save, MessageSquare, ChevronLeft, ChevronRight, Trash2, X, FileDown, Maximize2, Minimize2, Search, RotateCw,
-  Highlighter, Underline, StickyNote, Loader2, Columns2, MoreHorizontal, GripVertical, Share2,
+  Highlighter, Underline, StickyNote, Loader2, Columns2, MoreHorizontal, GripVertical, Share2, LayoutGrid, ZoomIn, ZoomOut, Scan,
 } from 'lucide-react';
 import { db, now, uid } from '@/lib/backend';
 import { useApp } from '@/lib/app';
@@ -77,7 +77,10 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
   const [textMode, setTextMode] = useState<TextMode>(null);
   const [hlColor, setHlColor] = useState(HIGHLIGHTS[0]);
   const [selected, setSelected] = useState<string[]>([]);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoomRaw] = useState(1);
+  const [view, setView] = useState<'grid' | 'page'>(embeddedId ? 'page' : 'grid');   // page panel first; tap a page to write on it
+  const userZoom = useRef(false);
+  const setZoom = (z: number) => { userZoom.current = true; setZoomRaw(Math.min(4, Math.max(0.3, z))); };
   const [panel, setPanel] = useState<null | 'comments' | 'search'>(null);
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<{ page: number; snippet: string }[] | null>(null);
@@ -142,9 +145,20 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
   // thumbnails
   useEffect(() => {
     if (!pdf) return;
-    (async () => { for (let i = 1; i <= Math.min(pdf.numPages, 200); i++) { if (thumbs[i]) continue; const r = await renderPdfPage(pdf, i, 92, 1); const u = r.canvas.toDataURL('image/jpeg', 0.7); setThumbs((t) => ({ ...t, [i]: u })); } })();
+    (async () => { for (let i = 1; i <= Math.min(pdf.numPages, 200); i++) { if (thumbs[i]) continue; const r = await renderPdfPage(pdf, i, 240, 1); const u = r.canvas.toDataURL('image/jpeg', 0.72); setThumbs((t) => ({ ...t, [i]: u })); } })();
   }, [pdf]);
-  useEffect(() => { const fit = () => { const w = scrollRef.current?.clientWidth || 800; setZoom(Math.min(1.5, Math.max(0.3, +((w - 40) / W).toFixed(2)))); }; fit(); window.addEventListener('resize', fit); return () => window.removeEventListener('resize', fit); }, [!!ann, panel, present]);
+  // fit the whole page to the screen (slides fill the width and height; portrait pages fit the width)
+  const fitZoom = useCallback(() => {
+    const el = scrollRef.current; if (!el) return 1;
+    const w = el.clientWidth - 32, h = el.clientHeight - 32;
+    const fw = w / dim.w, fh = h / dim.h;
+    return Math.min(3, Math.max(0.3, +(dim.w >= dim.h ? Math.min(fw, fh) : Math.min(fw, 1.5)).toFixed(2)));
+  }, [dim.w, dim.h]);
+  const fitNow = () => { userZoom.current = false; setZoomRaw(fitZoom()); };
+  // re-fit when the layout changes (opening, panels, fullscreen, window size) …
+  useEffect(() => { if (view !== 'page') return; userZoom.current = false; const f = () => { if (!userZoom.current) setZoomRaw(fitZoom()); }; const t = setTimeout(f, 30); window.addEventListener('resize', f); return () => { clearTimeout(t); window.removeEventListener('resize', f); }; }, [!!ann, panel, present, view]);
+  // … and on page change, unless she has zoomed in herself
+  useEffect(() => { if (view === 'page' && !userZoom.current) setZoomRaw(fitZoom()); }, [active, dim.w, dim.h]);
 
   const persist = useCallback((a: Annotation) => saver.schedule('ann', () => db.update('annotations', a.id, { pages: a.pages, updated_at: now() }, true)), [saver]);
   const setPages = (pages: AnnotationPage[]) => { if (!ann) return; const a = { ...ann, pages }; setAnn(a); persist(a); };
@@ -166,6 +180,14 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
     });
     setObjects([...page.objects, ...objs]);
   };
+
+  // tapping a page in the panel opens it full screen with the pen ready
+  const openPage = (i: number) => {
+    setActive(i); setSelected([]); setTextMode(null); setPanel(null);
+    setTools(['pen', 'eraser'].includes(tools.tool) ? tools : { ...tools, tool: 'pen' });
+    userZoom.current = false; setView('page'); setPresent(true);
+  };
+  const showGrid = () => { setView('grid'); setPresent(false); setSelected([]); };
 
   const insertBlank = (template: 'blank' | 'lined' | 'grid') => {
     if (!ann) return;
@@ -231,6 +253,7 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
           <div className="hidden text-[11px] text-muted-foreground sm:block">Your annotations are a private layer — the original document is never modified</div>
         </div>
         <div className="hidden md:block"><SaveBadge state={saver.state} /></div>
+        {view === 'page' && <Tooltip content="All pages"><Button size="sm" variant="secondary" aria-label="All pages" onClick={showGrid}><LayoutGrid /><span className="hidden sm:inline">Pages</span></Button></Tooltip>}
         <Tooltip content="Search text"><Button size="icon" variant={panel === 'search' ? 'secondary' : 'ghost'} aria-label="Search" onClick={() => setPanel(panel === 'search' ? null : 'search')}><Search /></Button></Tooltip>
         <Tooltip content="Comments"><Button size="icon" variant={panel === 'comments' ? 'secondary' : 'ghost'} aria-label="Comments" onClick={() => setPanel(panel === 'comments' ? null : 'comments')}><MessageSquare /></Button></Tooltip>
         {!embeddedId && <Tooltip content="Split screen"><Button size="icon" variant="ghost" aria-label="Split screen" onClick={() => nav(`/app/split?left=document:${doc.id}`)}><Columns2 /></Button></Tooltip>}
@@ -257,7 +280,7 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
         </DropdownMenu>
       </div>
 
-      <div className="px-3 pb-2 sm:px-4">
+      {view === 'page' && <div className="px-3 pb-2 sm:px-4">
         <Toolbar tools={tools} setTools={(t) => { setTools(t); setTextMode(null); }} canUndo={!!page && hist.canUndo(page.key)} canRedo={!!page && hist.canRedo(page.key)} onUndo={undo} onRedo={redo}
           zoom={zoom} setZoom={setZoom} selection={selObjs}
           onImage={async (f) => { const r = await storeImage(`${app.user.id}/${uid()}`, f); setObjects([...(page?.objects || []), { id: nanoid(8), type: 'image', x: 80, y: 80, w: r.w, h: r.h, src: r.src }]); }}
@@ -278,10 +301,27 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
             <button className="ml-auto underline" onClick={() => setTextMode(null)}>Done</button>
           </div>
         )}
-      </div>
+      </div>}
 
+      {view === 'grid' ? (
+        <div className="min-h-0 flex-1 overflow-auto px-3 pb-4 sm:px-4" aria-label="All pages">
+          <p className="mb-3 text-sm text-muted-foreground">Tap a page to open it full screen and start writing. Drag pages to reorder them.</p>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+            {ann.pages.map((p, i) => (
+              <button key={p.key} draggable onDragStart={() => { dragFrom.current = i; }} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (dragFrom.current != null) movePage(dragFrom.current, i); dragFrom.current = null; setView('grid'); }}
+                onClick={() => openPage(i)} aria-label={`Open page ${i + 1}`}
+                className={cn('rounded-2xl border border-border bg-card p-2 text-left transition hover:-translate-y-0.5 hover:shadow-lift', i === active && 'ring-2 ring-lavender-deep')}>
+                <div className="overflow-hidden rounded-lg bg-white shadow-soft">
+                  {p.source === 'pdf' ? (thumbs[p.pdf_page!] ? <img src={thumbs[p.pdf_page!]} alt="" className="w-full" style={{ transform: `rotate(${p.rotation}deg)` }} /> : <div className="aspect-[4/3] animate-pulse bg-muted" />) : <div className="grid aspect-[3/4] place-items-center text-lavender-ink">+ notes</div>}
+                </div>
+                <div className="mt-1.5 text-xs text-muted-foreground">Page {i + 1}{p.objects.length ? ` · ${p.objects.length}✎` : ''}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
       <div className="flex min-h-0 flex-1 gap-3 px-3 pb-3 sm:px-4">
-        <aside className="hidden w-[112px] shrink-0 flex-col gap-1.5 overflow-y-auto rounded-2xl border border-border bg-card/70 p-2 sm:flex" aria-label="Pages">
+        <aside className={cn('w-[112px] shrink-0 flex-col gap-1.5 overflow-y-auto rounded-2xl border border-border bg-card/70 p-2', present ? 'hidden' : 'hidden sm:flex')} aria-label="Pages">
           {ann.pages.map((p, i) => (
             <button key={p.key} draggable onDragStart={() => { dragFrom.current = i; }} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (dragFrom.current != null) movePage(dragFrom.current, i); dragFrom.current = null; }}
               onClick={() => { setActive(i); setSelected([]); }} aria-label={`Page ${i + 1}`} className={cn('group relative rounded-lg p-1 text-[11px]', i === active ? 'bg-secondary ring-2 ring-lavender-deep' : 'hover:bg-muted')}>
@@ -300,7 +340,7 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
                 <div className="relative overflow-hidden rounded bg-white shadow-lift ring-1 ring-black/5">
                   <div style={{ pointerEvents: textMode ? 'none' : 'auto' }}>
                     <InkCanvas key={page.key + page.rotation} width={dim.w} height={dim.h} zoom={zoom} objects={page.objects} onCommit={(o) => setObjects(o)} selected={selected} onSelect={setSelected}
-                      tools={tools} background={pageBg} pencilOnly={!!app.user.settings?.pencil_only} onRequestMath={(at, obj) => setMathAt({ at, obj })} />
+                      tools={tools} background={pageBg} pencilOnly={!!app.user.settings?.pencil_only} onZoom={setZoom} onUndo={undo} onRedo={redo} onRequestMath={(at, obj) => setMathAt({ at, obj })} />
                   </div>
                   {items.length > 0 && <TextLayer items={items} zoom={zoom} active={!!textMode} onSelectText={onSelectText} />}
                   {flash?.key === page.key && flash.boxes.map((b, i) => <div key={i} className="pointer-events-none absolute animate-pulse rounded-sm bg-[#7C6FD1]/45" style={{ left: b.x * zoom, top: b.y * zoom, width: b.w * zoom, height: b.h * zoom }} />)}
@@ -312,6 +352,12 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
             <Button size="icon" variant="ghost" aria-label="Previous page" disabled={active === 0} onClick={() => setActive(active - 1)}><ChevronLeft /></Button>
             <span className="tabular-nums text-muted-foreground">{active + 1} / {ann.pages.length}{page?.source === 'blank' ? ' · inserted page' : ''}</span>
             <Button size="icon" variant="ghost" aria-label="Next page" disabled={active === ann.pages.length - 1} onClick={() => setActive(active + 1)}><ChevronRight /></Button>
+            <span className="mx-1 h-5 w-px bg-border" />
+            <Button size="icon" variant="ghost" aria-label="Zoom out" onClick={() => setZoom(+(zoom - 0.15).toFixed(2))}><ZoomOut /></Button>
+            <button className="w-12 text-center text-xs tabular-nums text-muted-foreground hover:text-foreground" aria-label="Fit page" onClick={fitNow}>{Math.round(zoom * 100)}%</button>
+            <Button size="icon" variant="ghost" aria-label="Zoom in" onClick={() => setZoom(+(zoom + 0.15).toFixed(2))}><ZoomIn /></Button>
+            <Button size="icon" variant="ghost" aria-label="Fit page to screen" onClick={fitNow}><Scan /></Button>
+            <Button size="icon" variant="ghost" aria-label={present ? 'Exit full screen' : 'Full screen'} onClick={() => setPresent(!present)}>{present ? <Minimize2 /> : <Maximize2 />}</Button>
           </div>
         </div>
         {panel && (
@@ -345,6 +391,7 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
           </aside>
         )}
       </div>
+      )}
       <MathDialog open={!!mathAt} initial={mathAt?.obj?.latex} onClose={() => setMathAt(null)} onSave={(latex) => {
         if (!page || !mathAt) return; const fs = mathAt.obj?.fontSize || 20; const { w, h } = measureMath(latex, fs);
         if (mathAt.obj) setObjects(page.objects.map((o) => (o.id === mathAt.obj.id ? { ...o, latex, w, h } as any : o)));
