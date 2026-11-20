@@ -21,7 +21,7 @@ import { InkCanvas, DEFAULT_TOOLS, ToolState } from '@/canvas/InkCanvas';
 import { Toolbar } from '@/canvas/Toolbar';
 import { selectionOps, useHistory } from '@/canvas/useInk';
 import { openPdf, renderPdfPage, PDFDoc } from '@/lib/pdf';
-import { createNotebook } from '@/lib/actions';
+import { createNotebook, publishShared } from '@/lib/actions';
 import { cn, fileKind, fmtDateTime, safeName, saveBlob, timeAgo, toLocalInput } from '@/lib/utils';
 
 export type DisplayStatus = 'assigned' | 'in_progress' | 'submitted' | 'under_review' | 'returned' | 'completed' | 'overdue';
@@ -234,6 +234,7 @@ function StudentSubmission({ a, existing }: { a: Assignment; existing?: Submissi
     catch (e: any) { app.toast(e.message, 'err'); } finally { setBusy(false); }
   };
   const save = async (submit: boolean) => {
+    if (submit) for (const nb of nbIds) await publishShared('notebook', nb);
     const row: any = { text_html: html, files, notebook_ids: nbIds, status: submit ? 'submitted' : 'in_progress', updated_at: now(), ...(submit ? { submitted_at: now() } : {}) };
     if (existing) await db.update('submissions', existing.id, row);
     else await db.insert('submissions', { assignment_id: a.id, student_id: app.user.id, ...row });

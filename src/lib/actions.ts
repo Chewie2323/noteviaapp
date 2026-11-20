@@ -1,4 +1,4 @@
-import { db, now, uid, supabase, STORAGE_LIMIT_BYTES } from './backend';
+import { db, now, uid, supabase, STORAGE_LIMIT_BYTES, LOCAL_FIRST } from './backend';
 import type { Flashcard, FlashcardDeck, Classroom, ClassroomMember, DocumentRow, Folder, Notebook, NotebookPage, Orientation, PaperSize, Profile, TemplateId } from './types';
 import { PASTELS, guessMime, safeName } from './utils';
 import { quiz } from './localAI';
@@ -36,10 +36,13 @@ export async function storageUsed(ownerId: string) {
 }
 
 export async function uploadDocuments(user: Profile, files: File[], folderId: string | null, workspaceId: string | null, onProgress?: (d: number, t: number) => void) {
-  const MAX = 100 * 1024 * 1024;
-  for (const f of files) if (f.size > MAX) throw new Error(`“${f.name}” is larger than 100 MB.`);
-  const used = await storageUsed(user.id);
-  if (used + files.reduce((s, f) => s + f.size, 0) > STORAGE_LIMIT_BYTES) throw new Error('Storage limit reached — empty the recycle bin or remove large files.');
+  // In the app, files are kept on the device, so there is no Notevia limit (only the device's free space).
+  if (!LOCAL_FIRST) {
+    const MAX = 100 * 1024 * 1024;
+    for (const f of files) if (f.size > MAX) throw new Error(`“${f.name}” is larger than 100 MB.`);
+    const used = await storageUsed(user.id);
+    if (used + files.reduce((s, f) => s + f.size, 0) > STORAGE_LIMIT_BYTES) throw new Error('Storage limit reached — empty the recycle bin or remove large files.');
+  }
   const out: DocumentRow[] = [];
   let i = 0;
   for (const f of files) {
@@ -143,3 +146,24 @@ export const addCard = (user: Profile, deckId: string, front: string, back: stri
 
 /** Draft flashcards from study text with the on-device helper (the student edits them afterwards). */
 export const cardsFromText = (text: string, count = 10) => quiz(text, count).map((q) => ({ front: q.q, back: q.a }));
+
+/**
+ * Files you keep on your device are copied to the cloud only when you share them. Call this whenever a document or notebook
+ * is shared (with a person, a classroom, or an assignment submission) so the other side can open it.
+ */
+export async function publishShared(type: 'document' | 'notebook' | string, id: string) {
+  if (!LOCAL_FIRST) return;
+  try {
+    if (type === 'document') {
+      const d = await db.get<DocumentRow>('documents', id);
+      if (d?.storage_path) await db.publishFile('documents', d.storage_path);
+    } else if (type === 'notebook') {
+      const pages = await db.list<any>('notebook_pages', { notebook_id: id });
+      const text = JSON.stringify(pages);
+      const imgs = new Set<string>();
+      for (const m of text.matchAll(/storage:notebooks\/([^"\\]+)/g)) imgs.add(m[1]);
+      for (const p of imgs) await db.publishFile('notebooks', p);
+      for (const pg of pages) for (const a of pg.audio || []) if (a.storage_path) await db.publishFile('audio', a.storage_path);
+    }
+  } catch (e) { console.warn('publishShared', e); }
+}

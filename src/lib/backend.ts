@@ -5,6 +5,7 @@
  * UI code only talks to `db`, `auth` and `fn`.
  */
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { Capacitor } from '@capacitor/core';
 import { get as idbGet, set as idbSet, del as idbDel } from 'idb-keyval';
 import { nanoid } from 'nanoid';
 import type { Profile, Role, TableName } from './types';
@@ -18,6 +19,35 @@ const FORCE_DEMO = import.meta.env.VITE_FORCE_DEMO === 'true';
 export const MODE: 'supabase' | 'demo' = !FORCE_DEMO && URL_ && KEY ? 'supabase' : 'demo';
 export const supabase: SupabaseClient | null = MODE === 'supabase' ? createClient(URL_!, KEY!, { auth: { persistSession: true, detectSessionInUrl: true } }) : null;
 export const STORAGE_LIMIT_BYTES = Number(import.meta.env.VITE_STORAGE_LIMIT_MB || 2048) * 1024 * 1024;
+/**
+ * Local-first files (iOS / Android app only): your own documents, notebook images, audio and templates live in the app's private
+ * storage on the device — limited only by the device's free space, like Notability. They are copied to the cloud only when you
+ * share them (see publishFile). Browsers keep the cloud-first behaviour because Safari can clear web storage it considers unused.
+ */
+export const LOCAL_FIRST = MODE === 'supabase' && Capacitor.isNativePlatform();
+const LOCAL_BUCKETS = new Set<Bucket>(['documents', 'notebooks', 'audio', 'templates']);
+const isLocal = (b: Bucket) => LOCAL_FIRST && LOCAL_BUCKETS.has(b);
+const localPath = (b: Bucket, p: string) => `nv-files/${b}/${p}`;
+async function fsMod() { return import('@capacitor/filesystem'); }
+async function localWrite(bucket: Bucket, path: string, blob: Blob) {
+  const { Filesystem, Directory } = await fsMod();
+  const data: string = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1] || ''); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+  await Filesystem.writeFile({ path: localPath(bucket, path), data, directory: Directory.Data, recursive: true });
+}
+async function localRead(bucket: Bucket, path: string): Promise<Blob | null> {
+  try {
+    const { Filesystem, Directory } = await fsMod();
+    const { uri } = await Filesystem.getUri({ path: localPath(bucket, path), directory: Directory.Data });
+    await Filesystem.stat({ path: localPath(bucket, path), directory: Directory.Data });
+    const r = await fetch(Capacitor.convertFileSrc(uri));
+    if (!r.ok) return null;
+    const blob = await r.blob();
+    return blob.size ? blob : null;
+  } catch { return null; }
+}
+async function localDelete(bucket: Bucket, path: string) {
+  try { const { Filesystem, Directory } = await fsMod(); await Filesystem.deleteFile({ path: localPath(bucket, path), directory: Directory.Data }); } catch { /* not on this device */ }
+}
 export const AI_ENABLED = MODE === 'supabase' && import.meta.env.VITE_AI_ENABLED === 'true';
 export const GOOGLE_AUTH = MODE === 'supabase' && import.meta.env.VITE_GOOGLE_AUTH === 'true';
 
@@ -138,6 +168,7 @@ export const db = {
 
   // ----- private storage -----
   async upload(bucket: Bucket, path: string, blob: Blob): Promise<string> {
+    if (isLocal(bucket)) { await localWrite(bucket, path, blob); urlCache.delete(`${bucket}/${path}`); return path; }
     if (supabase) {
       const { error } = await supabase.storage.from(bucket).upload(path, blob, { upsert: true, contentType: blob.type || undefined });
       if (error) throw error;
@@ -148,9 +179,13 @@ export const db = {
     return path;
   },
   async download(bucket: Bucket, path: string): Promise<Blob> {
+    if (isLocal(bucket)) {
+      const local = await localRead(bucket, path);
+      if (local) return local;
+    }
     if (supabase) {
       const { data, error } = await supabase.storage.from(bucket).download(path);
-      if (error) throw error;
+      if (error) throw new Error(isLocal(bucket) ? 'This file is stored on another device. Open Notevia there and share it to see it here.' : error.message);
       return data;
     }
     const b = (await idbGet(`nv:file:${bucket}/${path}`)) as Blob | undefined;
@@ -163,7 +198,9 @@ export const db = {
     const c = urlCache.get(k);
     if (c && c.exp > Date.now()) return c.url;
     let url: string;
-    if (supabase) {
+    const local = isLocal(bucket) ? await localRead(bucket, path) : null;
+    if (local) url = URL.createObjectURL(local);
+    else if (supabase) {
       const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
       if (error) throw error;
       url = data.signedUrl;
@@ -171,7 +208,16 @@ export const db = {
     urlCache.set(k, { url, exp: Date.now() + 50 * 60 * 1000 });
     return url;
   },
+  /** Copy a file that lives on this device to the cloud so people it is shared with can open it. */
+  async publishFile(bucket: Bucket, path: string) {
+    if (!isLocal(bucket) || !supabase) return;
+    const blob = await localRead(bucket, path);
+    if (!blob) return;
+    const { error } = await supabase.storage.from(bucket).upload(path, blob, { upsert: true, contentType: blob.type || undefined });
+    if (error) throw error;
+  },
   async removeFile(bucket: Bucket, path: string) {
+    if (isLocal(bucket)) await localDelete(bucket, path);
     if (supabase) await supabase.storage.from(bucket).remove([path]);
     else await idbDel(`nv:file:${bucket}/${path}`);
     urlCache.delete(`${bucket}/${path}`);

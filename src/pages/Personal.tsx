@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, Star, Download, Trash2, RotateCcw, Settings as SettingsIcon, ShieldCheck, Moon, Sun, PenTool, Database, FileJson, UserX, KeyRound, ExternalLink, Folder as FolderIcon, Link2, Timer, Bell } from 'lucide-react';
 import { useApp, ask } from '@/lib/app';
 import { useTable } from '@/lib/hooks';
-import { auth, db, fn, MODE, resetDemo, STORAGE_LIMIT_BYTES } from '@/lib/backend';
+import { auth, db, fn, MODE, resetDemo, STORAGE_LIMIT_BYTES, LOCAL_FIRST } from '@/lib/backend';
 import type { DocumentRow, DownloadLog, Folder, Notebook, ResourceLink, Share } from '@/lib/types';
 import { exportMyData, purge, restore } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
@@ -173,7 +173,7 @@ export function SettingsPage() {
             <Row icon={<PenTool />} title="Two-finger tap to undo" desc="Tap the canvas with two fingers to undo, three to redo — like Notability"><Switch checked={settings.tap_undo !== false} onCheckedChange={(v) => setSetting({ tap_undo: v })} aria-label="Two-finger tap to undo" /></Row>
             <Row icon={<PenTool />} title="Stylus-only drawing (palm rejection)" desc="Only Apple Pencil or a stylus writes; fingers scroll and pinch"><Switch checked={!!settings.pencil_only} onCheckedChange={(v) => setSetting({ pencil_only: v })} aria-label="Stylus only" /></Row>
             <Row icon={<Bell />} title="Email reminders" desc="Due-soon and feedback emails (in-app notifications always stay on)"><Switch checked={settings.email_notifications !== false} onCheckedChange={(v) => setSetting({ email_notifications: v })} aria-label="Email reminders" /></Row>
-            <Row icon={<Database />} title="Storage" desc={`${formatBytes(used)} of ${formatBytes(STORAGE_LIMIT_BYTES)} used`}><div className="w-40"><Progress value={(used / STORAGE_LIMIT_BYTES) * 100} /></div></Row>
+            <Row icon={<Database />} title="Storage" desc={LOCAL_FIRST ? `${formatBytes(used)} kept on this device — no Notevia limit. Files are copied to the cloud only when you share them.` : `${formatBytes(used)} of ${formatBytes(STORAGE_LIMIT_BYTES)} used`}>{!LOCAL_FIRST && <div className="w-40"><Progress value={(used / STORAGE_LIMIT_BYTES) * 100} /></div>}</Row>
           </div>
         </TabsContent>
         <TabsContent value="security">

@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useApp, ask } from '@/lib/app';
 import { useLocalState, useTable } from '@/lib/hooks';
-import { db, now, STORAGE_LIMIT_BYTES } from '@/lib/backend';
+import { db, now, STORAGE_LIMIT_BYTES, LOCAL_FIRST } from '@/lib/backend';
 import type { DocumentRow, Folder, Notebook, Workspace } from '@/lib/types';
 import { createFolder, createPage, duplicateDocument, trash, uploadDocuments } from '@/lib/actions';
 import { docxToHtml } from '@/lib/office';
@@ -182,7 +182,7 @@ export default function Documents() {
         {allTags.length > 0 && <NativeSelect aria-label="Tag" className="w-auto" value={tag} onChange={(e) => setTag(e.target.value)}><option value="">All tags</option>{allTags.map((t) => <option key={t} value={t}>#{t}</option>)}</NativeSelect>}
         <NativeSelect aria-label="Sort" className="w-auto" value={sort} onChange={(e) => setSort(e.target.value as any)}><option value="recent">Recently updated</option><option value="name">Name A–Z</option><option value="size">Largest first</option></NativeSelect>
         <ViewToggle value={view} onChange={setView} />
-        <div className="ml-auto w-48 text-[11px] text-muted-foreground"><div className="mb-1 flex justify-between"><span>Your storage</span><span>{formatBytes(used)} / {formatBytes(STORAGE_LIMIT_BYTES)}</span></div><Progress value={(used / STORAGE_LIMIT_BYTES) * 100} /></div>
+        {LOCAL_FIRST ? <div className="ml-auto text-[11px] text-muted-foreground">{formatBytes(used)} on this device · no limit</div> : <div className="ml-auto w-48 text-[11px] text-muted-foreground"><div className="mb-1 flex justify-between"><span>Your storage</span><span>{formatBytes(used)} / {formatBytes(STORAGE_LIMIT_BYTES)}</span></div><Progress value={(used / STORAGE_LIMIT_BYTES) * 100} /></div>}
       </div>
 
       <nav className="mb-4 flex flex-wrap items-center gap-1 text-sm" aria-label="Breadcrumb">

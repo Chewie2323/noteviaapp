@@ -7,6 +7,7 @@ import { Avatar } from './common';
 import { useApp } from '@/lib/app';
 import { useTable } from '@/lib/hooks';
 import { db, supabase } from '@/lib/backend';
+import { publishShared } from '@/lib/actions';
 import type { Classroom, Permission, Profile, ResourceType, Share } from '@/lib/types';
 
 const PERMS: { id: Permission; label: string }[] = [{ id: 'view', label: 'View only' }, { id: 'comment', label: 'Can comment' }, { id: 'edit', label: 'Can edit' }];
@@ -24,6 +25,7 @@ export function ShareDialog({ open, onOpenChange, type, id, name }: { open: bool
 
   const add = async (grantee_type: 'user' | 'classroom', grantee_id: string) => {
     if (shares.some((s) => s.grantee_type === grantee_type && s.grantee_id === grantee_id)) return;
+    await publishShared(type, id);
     await db.insert<Share>('shares', { resource_type: type, resource_id: id, owner_id: app.user.id, grantee_type, grantee_id, permission: perm });
     app.log('shared', type, id, name);
     if (grantee_type === 'user') await app.notify([grantee_id], { kind: 'share', title: `${app.user.full_name} shared “${name}” with you`, link: '/app/shared' });
