@@ -15,7 +15,8 @@ export function AudioRecorder({ onDone, label = 'Record' }: { onDone: (blob: Blo
       if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error(), { name: 'NotSupported' });
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((m) => (window as any).MediaRecorder?.isTypeSupported?.(m)) || '';
-      const r = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      // speech-quality bitrate keeps a 1-hour lesson to roughly 15–25 MB instead of ~55 MB at the browser default
+      const r = new MediaRecorder(stream, { ...(mime ? { mimeType: mime } : {}), audioBitsPerSecond: mime.includes('mp4') ? 48000 : 32000 });
       chunks.current = []; r.ondataavailable = (e) => e.data.size && chunks.current.push(e.data);
       const t0 = Date.now();
       r.onstop = () => { stream.getTracks().forEach((t) => t.stop()); clearInterval(timer.current); onDone(new Blob(chunks.current, { type: r.mimeType || 'audio/webm' }), Math.max(1, Math.round((Date.now() - t0) / 1000))); setRec(null); setSecs(0); };
