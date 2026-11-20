@@ -9,11 +9,13 @@ export const PEN_DEFAULTS: Record<PenKind, { size: number; color: string; opacit
 };
 
 function options(pen: PenKind, size: number, hasPressure: boolean) {
+  // With a real stylus the line width follows pressure strongly (Apple Pencil / S Pen); mouse and finger keep the gentle simulated taper.
+  const s = hasPressure ? size * 1.5 : size;
   switch (pen) {
-    case 'fountain': return { size, thinning: 0.72, smoothing: 0.62, streamline: 0.42, simulatePressure: !hasPressure, start: { taper: size * 2 }, end: { taper: size * 5 } };
-    case 'pencil': return { size, thinning: 0.18, smoothing: 0.4, streamline: 0.3, simulatePressure: !hasPressure };
+    case 'fountain': return { size: s, thinning: hasPressure ? 0.9 : 0.72, smoothing: 0.62, streamline: hasPressure ? 0.3 : 0.42, simulatePressure: !hasPressure, start: { taper: size * 2 }, end: { taper: size * 5 } };
+    case 'pencil': return { size: s, thinning: hasPressure ? 0.75 : 0.18, smoothing: 0.4, streamline: hasPressure ? 0.2 : 0.3, simulatePressure: !hasPressure };
     case 'highlighter': return { size, thinning: 0, smoothing: 0.5, streamline: 0.5, simulatePressure: false, start: { cap: false }, end: { cap: false } };
-    default: return { size, thinning: hasPressure ? 0.35 : 0.18, smoothing: 0.55, streamline: 0.5, simulatePressure: !hasPressure };
+    default: return { size: s, thinning: hasPressure ? 0.85 : 0.18, smoothing: 0.55, streamline: hasPressure ? 0.3 : 0.5, simulatePressure: !hasPressure };
   }
 }
 
@@ -23,8 +25,8 @@ export function strokeOutline(points: number[], pen: PenKind, size: number): num
   let hasPressure = false;
   for (let i = 0; i < points.length; i += 3) {
     const p = points[i + 2];
-    if (p >= 0 && p !== 0.5) hasPressure = true;
-    pts.push([points[i], points[i + 1], p < 0 ? 0.5 : p]);
+    if (p >= 0 && Math.abs(p - 0.5) > 0.001) hasPressure = true;
+    pts.push([points[i], points[i + 1], p < 0 ? 0.5 : Math.pow(p, 0.85)]);
   }
   if (pen === 'pencil') {
     // slight deterministic grain so pencil lines feel hand-drawn

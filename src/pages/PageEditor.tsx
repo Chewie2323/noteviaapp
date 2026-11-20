@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { EditorContent } from '@tiptap/react';
-import { ArrowLeft, Share2, MessageSquare, Star, Download, X, Copy } from 'lucide-react';
+import { ArrowLeft, Share2, MessageSquare, Star, Download, X, Copy, PenLine } from 'lucide-react';
 import { useApp } from '@/lib/app';
 import { useRow } from '@/lib/hooks';
 import { db, now } from '@/lib/backend';
@@ -13,6 +13,7 @@ import { Tooltip } from '@/components/ui/misc';
 import { Empty, FullSpinner, SaveBadge } from '@/components/common';
 import { RichToolbar, useRichEditor } from '@/components/RichText';
 import { ShareDialog } from '@/components/ShareDialog';
+import { InkOverlay, useDocInk } from '@/components/InkLayer';
 import { CollabPanel } from '@/components/CollabPanel';
 import { duplicateDocument } from '@/lib/actions';
 import { safeName, saveBlob } from '@/lib/utils';
@@ -30,6 +31,8 @@ export default function PageEditor({ embeddedId, onClose }: { embeddedId?: strin
   const [panel, setPanel] = useState<null | 'collab'>(null);
   const [share, setShare] = useState(false);
   const loaded = useRef(false);
+  const ink = useDocInk(d && access ? d.id : undefined);
+  const [writing, setWriting] = useState(false);
   const editor = useRichEditor(d?.content_html || '', (html) => d && saver.schedule('page', () => db.update('documents', d.id, { content_html: html, size: html.length, updated_at: now() }, true)), { editable, placeholder: 'Start writing — type freely, add headings, checklists or tables…' });
   useEffect(() => { if (d && editor && !loaded.current) { editor.commands.setContent(d.content_html || '', false); loaded.current = true; app.touchRecent('document', d.id); } }, [d?.id, editor]);
   if (loading) return <FullSpinner />;
@@ -42,6 +45,7 @@ export default function PageEditor({ embeddedId, onClose }: { embeddedId?: strin
           onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== d.name) db.update('documents', d.id, { name: v, updated_at: now() }); }} />
         <SaveBadge state={saver.state} readOnly={!editable} />
         {!editable && <Button size="sm" variant="secondary" onClick={async () => { const c = await duplicateDocument(app.user, d); nav(`/app/pages/${c.id}`); }}><Copy /> Make my copy</Button>}
+        <Tooltip content={writing ? 'Stop writing' : 'Write on this page with a pen'}><Button size="icon" variant={writing ? 'default' : 'ghost'} aria-label="Write on page" aria-pressed={writing} onClick={() => setWriting(!writing)}><PenLine /></Button></Tooltip>
         <Tooltip content="Favourite"><Button size="icon" variant="ghost" aria-label="Favourite" onClick={() => app.toggleFav('document', d.id)}><Star className={app.isFav('document', d.id) ? 'fill-amber-400 text-amber-400' : ''} /></Button></Tooltip>
         <Tooltip content="Download as HTML"><Button size="icon" variant="ghost" aria-label="Download" onClick={() => saveBlob(new Blob([`<!doctype html><meta charset="utf-8"><title>${d.name}</title><body style="font-family:system-ui;max-width:760px;margin:40px auto;line-height:1.6">${editor?.getHTML() || ''}</body>`], { type: 'text/html' }), `${safeName(d.name)}.html`)}><Download /></Button></Tooltip>
         <Tooltip content="Comments & versions"><Button size="icon" variant={panel === 'collab' ? 'secondary' : 'ghost'} aria-label="Comments" onClick={() => setPanel(panel === 'collab' ? null : 'collab')}><MessageSquare /></Button></Tooltip>
@@ -49,8 +53,8 @@ export default function PageEditor({ embeddedId, onClose }: { embeddedId?: strin
       </div>
       <div className="flex min-h-0 flex-1 gap-3 px-3 pb-3 sm:px-4">
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-          {editable && editor && <RichToolbar editor={editor} />}
-          <div className="flex-1 overflow-auto"><div className="mx-auto max-w-3xl px-6 py-8 sm:px-10"><EditorContent editor={editor} className="prose-nv min-h-[60vh]" /></div></div>
+          {writing ? <div className="border-b border-border p-2">{ink.toolbar}</div> : editable && editor && <RichToolbar editor={editor} />}
+          <div data-scroll className="flex-1 overflow-auto"><InkOverlay ink={ink} writing={writing} className="mx-auto max-w-3xl"><div className="px-6 py-8 sm:px-10"><EditorContent editor={editor} className="prose-nv min-h-[60vh]" /></div></InkOverlay></div>
         </div>
         {panel && (
           <aside className="flex w-[340px] shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-card max-md:fixed max-md:inset-x-2 max-md:bottom-2 max-md:top-24 max-md:z-40 max-md:w-auto max-md:shadow-lift">

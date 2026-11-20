@@ -94,7 +94,7 @@ export default function Documents() {
   const openDoc = (d: DocumentRow) => {
     app.touchRecent('document', d.id);
     const k = fileKind(d.mime_type, d.name);
-    if (k === 'pdf') nav(`/app/pdf/${d.id}`); else if (k === 'page') nav(`/app/pages/${d.id}`); else setPreview(d);
+    if (k === 'pdf') nav(`/app/pdf/${d.id}`); else if (k === 'page') nav(`/app/pages/${d.id}`); else if (['docx', 'pptx', 'xlsx', 'csv', 'txt', 'image', 'svg'].includes(k)) nav(`/app/doc/${d.id}`); else setPreview(d);
   };
   const download = async (d: DocumentRow) => {
     if (!d.storage_path) { saveBlob(new Blob([`<!doctype html><meta charset="utf-8"><title>${d.name}</title>${d.content_html || ''}`], { type: 'text/html' }), `${d.name}.html`); return; }

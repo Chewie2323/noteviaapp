@@ -22,7 +22,7 @@ const SHAPES: { id: ShapeKind; icon: any; label: string }[] = [
 export interface ToolbarProps {
   tools: ToolState; setTools: (t: ToolState) => void;
   canUndo: boolean; canRedo: boolean; onUndo: () => void; onRedo: () => void;
-  zoom: number; setZoom: (z: number) => void;
+  zoom?: number; setZoom?: (z: number) => void;
   onImage?: (f: File) => void; onAudio?: () => void;
   selection: CanvasObject[];
   onPatch: (fn: (o: CanvasObject) => CanvasObject) => void;
@@ -120,10 +120,12 @@ export function Toolbar(p: ToolbarProps) {
         <Sep />
         <TB title="Undo (Ctrl+Z)" disabled={!p.canUndo} onClick={p.onUndo}><Undo2 /></TB>
         <TB title="Redo (Ctrl+Shift+Z)" disabled={!p.canRedo} onClick={p.onRedo}><Redo2 /></TB>
+        {p.setZoom && <>
         <Sep />
-        <TB title="Zoom out" onClick={() => p.setZoom(Math.max(0.2, +(p.zoom - 0.1).toFixed(2)))}><ZoomOut /></TB>
-        <button className="w-12 shrink-0 rounded-lg py-1 text-center text-xs tabular-nums hover:bg-muted" title="Reset zoom" onClick={() => p.setZoom(1)}>{Math.round(p.zoom * 100)}%</button>
-        <TB title="Zoom in" onClick={() => p.setZoom(Math.min(4, +(p.zoom + 0.1).toFixed(2)))}><ZoomIn /></TB>
+        <TB title="Zoom out" onClick={() => p.setZoom!(Math.max(0.2, +((p.zoom ?? 1) - 0.1).toFixed(2)))}><ZoomOut /></TB>
+        <button className="w-12 shrink-0 rounded-lg py-1 text-center text-xs tabular-nums hover:bg-muted" title="Reset zoom" onClick={() => p.setZoom!(1)}>{Math.round((p.zoom ?? 1) * 100)}%</button>
+        <TB title="Zoom in" onClick={() => p.setZoom!(Math.min(4, +((p.zoom ?? 1) + 0.1).toFixed(2)))}><ZoomIn /></TB>
+        </>}
         <div className="flex-1" />
         {p.extra}
       </div>

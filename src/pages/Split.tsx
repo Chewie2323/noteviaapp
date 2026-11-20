@@ -15,6 +15,7 @@ import NotebookEditor from './NotebookEditor';
 import WhiteboardEditor from './WhiteboardEditor';
 import PdfAnnotator from './PdfAnnotator';
 import PageEditor from './PageEditor';
+import DocInk from './DocInk';
 import { SubmissionReview } from './Assignments';
 
 type PaneRef = { type: 'notebook' | 'document' | 'link' | 'submission'; id: string } | null;
@@ -29,6 +30,7 @@ function DocPane({ id, onClose }: { id: string; onClose: () => void }) {
   const k = fileKind(d.mime_type, d.name);
   if (k === 'pdf') return <PdfAnnotator embeddedId={d.id} onClose={onClose} />;
   if (k === 'page') return <PageEditor embeddedId={d.id} onClose={onClose} />;
+  if (['docx', 'pptx', 'xlsx', 'csv', 'txt', 'image', 'svg'].includes(k)) return <DocInk embeddedId={d.id} onClose={onClose} />;
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-2 px-4 pb-2 pt-3"><Button size="icon" variant="ghost" aria-label="Close pane" onClick={onClose}><X /></Button><span className="truncate font-semibold">{d.name}</span></div>
@@ -58,7 +60,7 @@ export default function Split() {
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
   const left = parse(params.get('left')), right = parse(params.get('right'));
-  const narrow = useMediaQuery('(max-width: 900px)');
+  const narrow = useMediaQuery('(max-width: 560px)');
   const [vertical, setVertical] = useState(narrow);
   useEffect(() => setVertical(narrow), [narrow]);
   const [ratio, setRatio] = useState(0.5);

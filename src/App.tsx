@@ -25,6 +25,7 @@ const NotebookEditor = lazy(() => import('@/pages/NotebookEditor'));
 const WhiteboardEditor = lazy(() => import('@/pages/WhiteboardEditor'));
 const PdfAnnotator = lazy(() => import('@/pages/PdfAnnotator'));
 const PageEditor = lazy(() => import('@/pages/PageEditor'));
+const DocInk = lazy(() => import('@/pages/DocInk'));
 const Split = lazy(() => import('@/pages/Split'));
 const Router = import.meta.env.VITE_HASH_ROUTER === 'true' ? HashRouter : BrowserRouter;
 
@@ -82,6 +83,7 @@ function Inner() {
         <Route path="documents" element={<Documents />} />
         <Route path="pdf/:id" element={<PdfAnnotator />} />
         <Route path="pages/:id" element={<PageEditor />} />
+        <Route path="doc/:id" element={<DocInk />} />
         <Route path="split" element={<Split />} />
         <Route path="classes" element={<Classes />} />
         <Route path="classes/:id" element={<ClassroomDetail />} />

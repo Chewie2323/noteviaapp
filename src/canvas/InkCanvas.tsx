@@ -27,7 +27,8 @@ export const DEFAULT_TOOLS: ToolState = {
 export type CanvasBackground =
   | { kind: 'template'; template: TemplateId; customImage?: HTMLImageElement | null }
   | { kind: 'image'; image: HTMLCanvasElement | HTMLImageElement | null }
-  | { kind: 'board'; color: string; pattern: 'none' | 'grid' | 'dots' };
+  | { kind: 'board'; color: string; pattern: 'none' | 'grid' | 'dots' }
+  | { kind: 'none' };   // transparent: ink laid over other content
 
 export interface View { x: number; y: number; scale: number }
 
