@@ -7,6 +7,7 @@ import { useApp } from '@/lib/app';
 import { useKeyShortcuts, useLocalState, useRow } from '@/lib/hooks';
 import type { CanvasObject, MathObj, Notebook, NotebookPage } from '@/lib/types';
 import { atLeast } from '@/lib/access';
+import { usePencilActions } from '@/canvas/usePencil';
 import { InkCanvas, DEFAULT_TOOLS, ToolState, View } from '@/canvas/InkCanvas';
 import { Toolbar } from '@/canvas/Toolbar';
 import { addMindNode, selectionOps, storeImage, useHistory, useSaver } from '@/canvas/useInk';
@@ -33,6 +34,7 @@ export default function WhiteboardEditor({ embeddedId, onClose }: { embeddedId?:
   const { row: nb, loading } = useRow<Notebook>('notebooks', id);
   const [page, setPage] = useState<NotebookPage | null>(null);
   const [tools, setTools] = useLocalState<ToolState>('nv-board-tools', { ...DEFAULT_TOOLS, tool: 'select' });
+  usePencilActions(tools, setTools);
   const [selected, setSelected] = useState<string[]>([]);
   const [view, setView] = useState<View>({ x: 0, y: 0, scale: 1 });
   const [size, setSize] = useState({ w: 800, h: 600 });

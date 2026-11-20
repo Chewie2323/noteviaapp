@@ -95,3 +95,7 @@
 .nv-textlayer.inactive, .nv-textlayer.inactive span { pointer-events: none; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* Native iOS shell: keep content clear of the notch / home indicator */
+.native-ios #root { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); box-sizing: border-box; }
+.native-app { -webkit-touch-callout: none; overscroll-behavior: none; }

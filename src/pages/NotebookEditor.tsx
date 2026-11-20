@@ -10,6 +10,7 @@ import { useApp, ask } from '@/lib/app';
 import { useKeyShortcuts, useLocalState, useRow } from '@/lib/hooks';
 import type { AudioClip, CanvasObject, MathObj, Notebook, NotebookPage, Orientation, PaperSize, TemplateId } from '@/lib/types';
 import { atLeast } from '@/lib/access';
+import { usePencilActions } from '@/canvas/usePencil';
 import { InkCanvas, DEFAULT_TOOLS, ToolState } from '@/canvas/InkCanvas';
 import { Toolbar } from '@/canvas/Toolbar';
 import { pageDims, TEMPLATE_GROUPS, templateLabel } from '@/canvas/paper';
@@ -63,6 +64,7 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
   const [pages, setPages] = useState<NotebookPage[] | null>(null);
   const [active, setActive] = useState(0);
   const [tools, setTools] = useLocalState<ToolState>('nv-tools', DEFAULT_TOOLS);
+  usePencilActions(tools, setTools);
   const [selected, setSelected] = useState<string[]>([]);
   const [zoom, setZoom] = useState(1);
   const [thumbs, setThumbs] = useState(() => !embedded && window.innerWidth > 900);

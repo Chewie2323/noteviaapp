@@ -1,0 +1,34 @@
+name: Android build
+on:
+  workflow_dispatch:
+  push:
+    tags: ['android-*']
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: android-actions/setup-android@v3
+      - run: npm ci
+      - name: Build web bundle (Supabase env from repo secrets)
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_GOOGLE_AUTH: 'true'
+        run: npm run build && npx cap sync android
+      - name: Debug APK (install directly on a phone/tablet to test)
+        working-directory: android
+        run: ./gradlew assembleDebug
+      - name: Release bundle (.aab for Google Play)
+        working-directory: android
+        run: ./gradlew bundleRelease
+      - uses: actions/upload-artifact@v4
+        with:
+          name: notevia-android
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/bundle/release/*.aab

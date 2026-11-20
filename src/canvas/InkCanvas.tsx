@@ -195,7 +195,8 @@ export function InkCanvas(p: Props) {
     const ev = e.evt;
     const pt = pos();
     const onObject = !!e.target.findAncestor?.('.obj', true);
-    const t = tools.tool;
+    // S Pen / stylus: hold the barrel button (or flip to the eraser end) to erase temporarily
+    const t = ev.pointerType === 'pen' && !readOnly && ((ev.buttons & 32) || (ev.buttons & 2)) && ['pen', 'highlighter'].includes(tools.tool) ? 'eraser' : tools.tool;
     if (t === 'pen') {
       const pen = tools.pen;
       drawing.current = { kind: 'pen', pen, points: [pt.x, pt.y, evPressure(ev)], pointerId: ev.pointerId };

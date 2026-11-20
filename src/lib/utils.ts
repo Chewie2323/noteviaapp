@@ -1,3 +1,4 @@
+import { isNative, nativeSave } from '@/lib/native';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 export function cn(...inputs: ClassValue[]) { return twMerge(clsx(inputs)); }
@@ -67,6 +68,7 @@ export function guessMime(n: string) {
   } as Record<string, string>)[e] || 'application/octet-stream';
 }
 function anchorSave(blob: Blob, name: string) {
+  if (isNative()) { nativeSave(blob, name).catch(() => {}); return; }
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name;
   document.body.appendChild(a); a.click(); a.remove();
