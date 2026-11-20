@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ArrowRight, PenTool, FileText, GraduationCap, Columns2, Sparkles, ShieldCheck, Share2, CalendarDays, NotebookPen, Highlighter,
+  ArrowRight, PenTool, FileText, GraduationCap, Columns2, Layers, ShieldCheck, Share2, CalendarDays, NotebookPen, Highlighter,
   Eraser, Undo2, Users, BriefcaseBusiness, BookOpenCheck, Moon, Sun, Check, Lock, Shapes, Folder, Home, Search, Bell,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ export default function Landing() {
     { icon: Shapes, t: 'Infinite whiteboard', d: 'Mind maps, flowcharts, sticky notes and diagrams on an endless canvas you can share and export.' },
     { icon: Share2, t: 'Granular sharing', d: 'Private, view, comment or edit — for one person or a whole class — with comments, activity and version history.' },
     { icon: CalendarDays, t: 'Plan your time', d: 'Daily, weekly and monthly calendar linking classes, deadlines, meetings and study sessions to your work.' },
-    { icon: Sparkles, t: 'Notevia AI (optional)', d: 'Summaries, flashcards, quizzes and explanations — only when switched on, with clear consent and labelled results.' },
+    { icon: Layers, t: 'Study that sticks', d: 'Spaced-repetition flashcards made from your own notes, with a daily review so you only revise what is due.' },
   ];
   const BENEFITS = [
     { icon: BookOpenCheck, who: 'Educators', color: '#E4DDFB', points: ['Teach live in full-screen presentation mode', 'One library for lectures, worksheets and links', 'Review, annotate and grade submissions', 'Private classrooms for individuals or groups'] },
@@ -54,7 +54,6 @@ export default function Landing() {
     ['Can I edit Word and PowerPoint files?', 'Notevia previews DOCX, PPTX and XLSX in the browser and can convert DOCX into an editable Notevia page. Direct editing of Office files requires a Microsoft 365 or Google Workspace integration.'],
     ['Who can see my notes?', 'Only you, unless you share them. You choose view, comment or edit access for each person or classroom. Platform administrators can manage accounts but cannot open your content.'],
     ['Is my data protected?', 'Notevia is designed around UK GDPR principles: private-by-default storage, row-level access controls, data export, account deletion and configurable data retention.'],
-    ['Does Notevia AI read my documents?', 'Only when AI is enabled for your organisation, you have given permission, and you press Run on a specific item. Results are labelled as AI-generated and are always editable.'],
   ];
 
   return (

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ShieldCheck, Users, Settings2, Lock, Search } from 'lucide-react';
 import { useApp, ask } from '@/lib/app';
 import { useTable } from '@/lib/hooks';
-import { db, MODE, AI_ENABLED } from '@/lib/backend';
+import { db, MODE } from '@/lib/backend';
 import type { PlatformSettings, Profile, Role } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
@@ -50,7 +50,6 @@ export default function Admin() {
             <div className="max-w-2xl space-y-5 rounded-2xl border border-border bg-card p-6">
               <div className="flex items-center justify-between gap-4"><div><div className="text-sm font-medium">Allow new registrations</div><div className="text-xs text-muted-foreground">When off, only existing users can sign in</div></div><Switch checked={s.allow_registration} onCheckedChange={(v) => db.update('platform_settings', s.id, { allow_registration: v })} aria-label="Allow registration" /></div>
               <div className="flex items-center justify-between gap-4"><div><div className="text-sm font-medium">Default storage quota</div><div className="text-xs text-muted-foreground">Enforced per user in the app (VITE_STORAGE_LIMIT_MB) and by bucket size limits</div></div><Input type="number" className="w-28" defaultValue={s.default_quota_mb} onBlur={(e) => db.update('platform_settings', s.id, { default_quota_mb: Number(e.target.value) || 2048 })} aria-label="Quota in MB" /></div>
-              <div className="flex items-center justify-between gap-4"><div><div className="text-sm font-medium">Notevia AI</div><div className="text-xs text-muted-foreground">{AI_ENABLED ? 'The notevia-ai Edge Function is enabled for this build' : 'Not configured — deploy the notevia-ai function and set VITE_AI_ENABLED=true'}</div></div><Badge tone={AI_ENABLED ? 'sage' : 'neutral'}>{AI_ENABLED ? 'Enabled' : 'Off'}</Badge></div>
               <div><Label>Platform notice</Label><Textarea rows={2} value={notice} onChange={(e) => setNotice(e.target.value)} placeholder="Optional message for all users, e.g. planned maintenance" /><div className="mt-2 flex justify-end"><Button size="sm" onClick={() => db.update('platform_settings', s.id, { notice: notice || null })}>Save notice</Button></div></div>
               {MODE === 'demo' && <p className="text-xs text-muted-foreground">Demo mode: settings are stored in this browser only.</p>}
             </div>

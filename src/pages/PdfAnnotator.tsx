@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { nanoid } from 'nanoid';
 import {
   ArrowLeft, Download, FilePlus2, Save, MessageSquare, ChevronLeft, ChevronRight, Trash2, X, FileDown, Maximize2, Minimize2, Search, RotateCw,
-  Highlighter, Underline, StickyNote, Loader2, Columns2, Sparkles, MoreHorizontal, GripVertical, Share2,
+  Highlighter, Underline, StickyNote, Loader2, Columns2, MoreHorizontal, GripVertical, Share2,
 } from 'lucide-react';
 import { db, now, uid } from '@/lib/backend';
 import { useApp } from '@/lib/app';
@@ -21,7 +21,6 @@ import { Tooltip } from '@/components/ui/misc';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Empty, FullSpinner, SaveBadge } from '@/components/common';
 import { CollabPanel } from '@/components/CollabPanel';
-import { AIPanel } from '@/components/AIPanel';
 import { ShareDialog } from '@/components/ShareDialog';
 import { cn, HIGHLIGHTS, safeName, saveBlob } from '@/lib/utils';
 import { MathDialog } from '@/components/MathDialog';
@@ -79,7 +78,7 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
   const [hlColor, setHlColor] = useState(HIGHLIGHTS[0]);
   const [selected, setSelected] = useState<string[]>([]);
   const [zoom, setZoom] = useState(1);
-  const [panel, setPanel] = useState<null | 'comments' | 'search' | 'ai'>(null);
+  const [panel, setPanel] = useState<null | 'comments' | 'search'>(null);
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<{ page: number; snippet: string }[] | null>(null);
   const [flash, setFlash] = useState<{ key: string; boxes: TextItemBox[] } | null>(null);
@@ -234,7 +233,6 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
         <div className="hidden md:block"><SaveBadge state={saver.state} /></div>
         <Tooltip content="Search text"><Button size="icon" variant={panel === 'search' ? 'secondary' : 'ghost'} aria-label="Search" onClick={() => setPanel(panel === 'search' ? null : 'search')}><Search /></Button></Tooltip>
         <Tooltip content="Comments"><Button size="icon" variant={panel === 'comments' ? 'secondary' : 'ghost'} aria-label="Comments" onClick={() => setPanel(panel === 'comments' ? null : 'comments')}><MessageSquare /></Button></Tooltip>
-        <Tooltip content="Notevia AI"><Button size="icon" variant={panel === 'ai' ? 'secondary' : 'ghost'} aria-label="Notevia AI" onClick={() => setPanel(panel === 'ai' ? null : 'ai')}><Sparkles /></Button></Tooltip>
         {!embeddedId && <Tooltip content="Split screen"><Button size="icon" variant="ghost" aria-label="Split screen" onClick={() => nav(`/app/split?left=document:${doc.id}`)}><Columns2 /></Button></Tooltip>}
         {access === 'owner' && <Tooltip content="Share"><Button size="icon" variant="ghost" aria-label="Share" onClick={() => setShare(true)}><Share2 /></Button></Tooltip>}
         <DropdownMenu>
@@ -318,7 +316,7 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
         </div>
         {panel && (
           <aside className="flex w-[320px] shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-card max-md:fixed max-md:inset-x-2 max-md:bottom-2 max-md:top-28 max-md:z-40 max-md:w-auto max-md:shadow-lift">
-            {panel === 'ai' ? <AIPanel contextLabel={doc.name} getText={allText} onClose={() => setPanel(null)} /> : (
+            {(
               <>
                 <div className="flex items-center border-b border-border px-4 py-2.5"><span className="flex-1 text-sm font-semibold">{panel === 'search' ? 'Search this document' : 'Comments'}</span><Button size="icon" variant="ghost" aria-label="Close" onClick={() => setPanel(null)}><X /></Button></div>
                 {panel === 'search' ? (

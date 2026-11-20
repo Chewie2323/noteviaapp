@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Users, Star, Download, Trash2, RotateCcw, Settings as SettingsIcon, ShieldCheck, Moon, Sun, PenTool, Database, FileJson, UserX, Sparkles, KeyRound, ExternalLink, Folder as FolderIcon, Link2, Timer, Bell } from 'lucide-react';
+import { Users, Star, Download, Trash2, RotateCcw, Settings as SettingsIcon, ShieldCheck, Moon, Sun, PenTool, Database, FileJson, UserX, KeyRound, ExternalLink, Folder as FolderIcon, Link2, Timer, Bell } from 'lucide-react';
 import { useApp, ask } from '@/lib/app';
 import { useTable } from '@/lib/hooks';
-import { auth, db, fn, MODE, resetDemo, STORAGE_LIMIT_BYTES, AI_ENABLED } from '@/lib/backend';
+import { auth, db, fn, MODE, resetDemo, STORAGE_LIMIT_BYTES } from '@/lib/backend';
 import type { DocumentRow, DownloadLog, Folder, Notebook, ResourceLink, Share } from '@/lib/types';
 import { exportMyData, purge, restore } from '@/lib/actions';
 import { Button } from '@/components/ui/button';
@@ -187,7 +187,6 @@ export function SettingsPage() {
         <TabsContent value="privacy">
           <div className="space-y-5">
             <div className="rounded-2xl border border-border bg-card px-6 py-2">
-              <Row icon={<Sparkles />} title="Allow Notevia AI to process content I choose" desc={AI_ENABLED ? 'Text is sent to the AI provider only when you press Run' : 'Notevia AI isn’t configured on this server'}><Switch disabled={!AI_ENABLED} checked={!!settings.ai_consent} onCheckedChange={(v) => setSetting({ ai_consent: v })} aria-label="AI consent" /></Row>
               <Row icon={<Timer />} title="Recycle bin retention" desc="Deleted items are removed permanently after this period">
                 <NativeSelect className="w-36" value={String(settings.retention_days ?? 30)} onChange={(e) => setSetting({ retention_days: Number(e.target.value) })}>{[7, 14, 30, 60, 90, 180].map((d) => <option key={d} value={d}>{d} days</option>)}</NativeSelect>
               </Row>

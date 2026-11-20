@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { nanoid } from 'nanoid';
-import { ArrowLeft, Share2, MessageSquare, Sparkles, Star, Image as ImageIcon, FileDown, Palette, Maximize2, Minimize2, X, Locate } from 'lucide-react';
+import { ArrowLeft, Share2, MessageSquare, Star, Image as ImageIcon, FileDown, Palette, Maximize2, Minimize2, X, Locate } from 'lucide-react';
 import { db, now } from '@/lib/backend';
 import { useApp } from '@/lib/app';
 import { useKeyShortcuts, useLocalState, useRow } from '@/lib/hooks';
@@ -20,7 +20,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Empty, FullSpinner, SaveBadge } from '@/components/common';
 import { ShareDialog } from '@/components/ShareDialog';
 import { CollabPanel } from '@/components/CollabPanel';
-import { AIPanel } from '@/components/AIPanel';
 import { MathDialog } from '@/components/MathDialog';
 import { cn, safeName, saveBlob } from '@/lib/utils';
 
@@ -37,7 +36,7 @@ export default function WhiteboardEditor({ embeddedId, onClose }: { embeddedId?:
   const [selected, setSelected] = useState<string[]>([]);
   const [view, setView] = useState<View>({ x: 0, y: 0, scale: 1 });
   const [size, setSize] = useState({ w: 800, h: 600 });
-  const [panel, setPanel] = useState<null | 'collab' | 'ai'>(null);
+  const [panel, setPanel] = useState<null | 'collab'>(null);
   const [share, setShare] = useState(false);
   const [full, setFull] = useState(false);
   const [mathAt, setMathAt] = useState<{ at: { x: number; y: number } | null; obj?: MathObj } | null>(null);
@@ -135,7 +134,6 @@ export default function WhiteboardEditor({ embeddedId, onClose }: { embeddedId?:
         )}
         <Tooltip content="Favourite"><Button size="icon" variant="ghost" aria-label="Favourite" onClick={() => app.toggleFav('notebook', nb.id)}><Star className={app.isFav('notebook', nb.id) ? 'fill-amber-400 text-amber-400' : ''} /></Button></Tooltip>
         <Tooltip content="Comments & versions"><Button size="icon" variant={panel === 'collab' ? 'secondary' : 'ghost'} aria-label="Comments" onClick={() => setPanel(panel === 'collab' ? null : 'collab')}><MessageSquare /></Button></Tooltip>
-        <Tooltip content="Notevia AI"><Button size="icon" variant={panel === 'ai' ? 'secondary' : 'ghost'} aria-label="Notevia AI" onClick={() => setPanel(panel === 'ai' ? null : 'ai')}><Sparkles /></Button></Tooltip>
         {access === 'owner' && <Tooltip content="Share"><Button size="icon" variant="ghost" aria-label="Share" onClick={() => setShare(true)}><Share2 /></Button></Tooltip>}
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button size="icon" variant="ghost" aria-label="Export"><FileDown /></Button></DropdownMenuTrigger>
@@ -164,9 +162,7 @@ export default function WhiteboardEditor({ embeddedId, onClose }: { embeddedId?:
         </div>
         {panel && (
           <aside className="flex w-[340px] shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-card max-md:fixed max-md:inset-x-2 max-md:bottom-2 max-md:top-24 max-md:z-40 max-md:w-auto max-md:shadow-lift">
-            {panel === 'ai' ? <AIPanel contextLabel={nb.title} getText={text} onClose={() => setPanel(null)}
-              onInsert={editable ? (t) => { const c = centre(); setObjects([...page.objects, { id: nanoid(8), type: 'sticky', x: c.x - 160, y: c.y - 120, w: 320, h: 260, color: '#E4DDFB', text: `✦ AI-generated — review before use\n\n${t.replace(/[#*`]/g, '').slice(0, 900)}` }]); } : undefined} />
-              : <><div className="flex items-center border-b border-border px-4 py-2.5"><span className="flex-1 text-sm font-semibold">Comments & history</span><Button size="icon" variant="ghost" aria-label="Close" onClick={() => setPanel(null)}><X /></Button></div>
+            {<><div className="flex items-center border-b border-border px-4 py-2.5"><span className="flex-1 text-sm font-semibold">Comments & history</span><Button size="icon" variant="ghost" aria-label="Close" onClick={() => setPanel(null)}><X /></Button></div>
                 <div className="min-h-0 flex-1"><CollabPanel type="notebook" id={nb.id} name={nb.title} access={access} snapshot={() => page.objects} onRestore={async (s) => setObjects(s)} /></div></>}
           </aside>
         )}

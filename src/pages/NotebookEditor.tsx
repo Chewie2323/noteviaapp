@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { nanoid } from 'nanoid';
 import {
   ArrowLeft, Plus, Copy, Trash2, ChevronUp, ChevronDown, Maximize2, Minimize2, Columns2, FileDown, Mic, MessageSquare, Share2, Star,
-  PanelLeftClose, PanelLeft, ChevronLeft, ChevronRight, Sparkles, LayoutTemplate, NotebookText, Upload, X, MoreHorizontal, Loader2,
+  PanelLeftClose, PanelLeft, ChevronLeft, ChevronRight, LayoutTemplate, NotebookText, Upload, X, MoreHorizontal, Loader2,
 } from 'lucide-react';
 import { db, now } from '@/lib/backend';
 import { useApp, ask } from '@/lib/app';
@@ -27,7 +27,6 @@ import { Tooltip } from '@/components/ui/misc';
 import { Empty, FullSpinner, SaveBadge } from '@/components/common';
 import { ShareDialog } from '@/components/ShareDialog';
 import { CollabPanel } from '@/components/CollabPanel';
-import { AIPanel } from '@/components/AIPanel';
 import { MathDialog } from '@/components/MathDialog';
 import { AudioRecorder, AudioChip } from '@/components/Audio';
 import { RichText } from '@/components/RichText';
@@ -67,7 +66,7 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
   const [selected, setSelected] = useState<string[]>([]);
   const [zoom, setZoom] = useState(1);
   const [thumbs, setThumbs] = useState(() => !embedded && window.innerWidth > 900);
-  const [panel, setPanel] = useState<null | 'collab' | 'ai' | 'audio' | 'notes'>(null);
+  const [panel, setPanel] = useState<null | 'collab' | 'audio' | 'notes'>(null);
   const [present, setPresent] = useState(false);
   const [share, setShare] = useState(false);
   const [setup, setSetup] = useState(false);
@@ -252,7 +251,6 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
         <Tooltip content="Typed notes"><Button size="icon" variant={panel === 'notes' ? 'secondary' : 'ghost'} aria-label="Typed notes" onClick={() => setPanel(panel === 'notes' ? null : 'notes')}><NotebookText /></Button></Tooltip>
         <Tooltip content="Audio recordings"><Button size="icon" variant={panel === 'audio' ? 'secondary' : 'ghost'} aria-label="Audio" onClick={() => setPanel(panel === 'audio' ? null : 'audio')}><Mic /></Button></Tooltip>
         <Tooltip content="Comments & versions"><Button size="icon" variant={panel === 'collab' ? 'secondary' : 'ghost'} aria-label="Comments and versions" onClick={() => setPanel(panel === 'collab' ? null : 'collab')}><MessageSquare /></Button></Tooltip>
-        <Tooltip content="Notevia AI"><Button size="icon" variant={panel === 'ai' ? 'secondary' : 'ghost'} aria-label="Notevia AI" onClick={() => setPanel(panel === 'ai' ? null : 'ai')}><Sparkles /></Button></Tooltip>
         {access === 'owner' && <Tooltip content="Share"><Button size="icon" variant="ghost" aria-label="Share" onClick={() => setShare(true)}><Share2 /></Button></Tooltip>}
         <DropdownMenu>
           <DropdownMenuTrigger asChild><Button size="icon" variant="ghost" aria-label="More"><MoreHorizontal /></Button></DropdownMenuTrigger>
@@ -331,8 +329,7 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
 
         {panel && (
           <aside className="flex w-[340px] shrink-0 flex-col overflow-hidden rounded-2xl border border-border bg-card max-md:fixed max-md:inset-x-2 max-md:bottom-2 max-md:top-24 max-md:z-40 max-md:w-auto max-md:shadow-lift">
-            {panel === 'ai' ? <AIPanel contextLabel={nb.title} getText={textContent} onClose={() => setPanel(null)}
-              onInsert={editable ? (text) => { const c = centre(); setObjects([...(page?.objects || []), { id: nanoid(8), type: 'text', x: 60, y: c.y - 100, width: dims.w - 120, fontSize: 15, color: '#2F2B45', text: `✦ AI-generated (Notevia AI) — review before use\n\n${text.replace(/[#*`]/g, '')}` }]); app.toast('Inserted — AI content is labelled'); } : undefined} /> : (
+            {(
               <>
                 <div className="flex items-center gap-2 border-b border-border px-4 py-2.5">
                   <span className="flex-1 text-sm font-semibold">{panel === 'collab' ? 'Comments & history' : panel === 'audio' ? 'Audio recordings' : 'Typed notes'}</span>
