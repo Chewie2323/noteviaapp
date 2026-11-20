@@ -152,7 +152,7 @@ export default function WhiteboardEditor({ embeddedId, onClose }: { embeddedId?:
       <div className="flex min-h-0 flex-1 gap-3 px-3 pb-3 sm:px-4">
         <div ref={box} className="relative min-w-0 flex-1 overflow-hidden rounded-2xl border border-border shadow-soft">
           <InkCanvas mode="board" width={size.w} height={size.h} view={view} onView={setView} objects={page.objects} onCommit={(o) => setObjects(o)} selected={selected} onSelect={setSelected}
-            tools={tools} readOnly={!editable} pencilOnly={!!app.user.settings?.pencil_only} background={{ kind: 'board', ...bg }} onHint={setHint}
+            tools={tools} readOnly={!editable} pencilOnly={!!app.user.settings?.pencil_only} onUndo={undo} onRedo={redo} tapUndo={app.user.settings?.tap_undo !== false} background={{ kind: 'board', ...bg }} onHint={setHint}
             onRequestMath={(at, existing) => setMathAt({ at, obj: existing as MathObj })} />
           {!page.objects.length && editable && (
             <div className="pointer-events-none absolute inset-0 grid place-items-center">

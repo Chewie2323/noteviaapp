@@ -5,6 +5,7 @@ export type ResourceType = 'document' | 'notebook' | 'folder' | 'link';
 export interface UserSettings {
   retention_days?: number;       // recycle-bin auto-purge
   ai_consent?: boolean;          // permission to send content to the configured AI provider
+  tap_undo?: boolean;            // two-finger tap = undo, three-finger tap = redo (default on)
   pencil_only?: boolean;         // palm rejection: only stylus draws
   email_notifications?: boolean; // email reminders (default on)
   default_view?: 'grid' | 'list';

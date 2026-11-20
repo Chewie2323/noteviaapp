@@ -312,7 +312,7 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
               {page && (
                 <div className="overflow-hidden rounded-md shadow-lift ring-1 ring-black/5">
                   <InkCanvas key={page.id} width={dims.w} height={dims.h} zoom={zoom} objects={page.objects} onCommit={(o) => setObjects(o)}
-                    selected={selected} onSelect={setSelected} tools={tools} readOnly={!editable} pencilOnly={!!app.user.settings?.pencil_only}
+                    selected={selected} onSelect={setSelected} tools={tools} readOnly={!editable} pencilOnly={!!app.user.settings?.pencil_only} onUndo={undo} onRedo={redo} tapUndo={app.user.settings?.tap_undo !== false}
                     background={{ kind: 'template', template: page.template, customImage: bgImg }} onHint={setHint}
                     onRequestMath={(at, existing) => setMathAt({ at, obj: existing as MathObj })} />
                 </div>

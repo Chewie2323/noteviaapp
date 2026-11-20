@@ -53,6 +53,7 @@ export function Layout() {
   }, [app.user.id]);
   const { rows: ps } = useTable<any>('platform_settings');
   const notice = ps[0]?.notice as string | undefined;
+  const isSplit = /^\/app\/split/.test(loc.pathname);
   const immersive = /^\/app\/(notebooks|whiteboards|pdf|pages)\/[^/]+|^\/app\/split/.test(loc.pathname);
 
   const Side = ({ mini }: { mini: boolean }) => (
@@ -92,7 +93,7 @@ export function Layout() {
   return (
     <div className="flex h-[100dvh] overflow-hidden bg-background text-foreground">
       <a href="#main" className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[300] focus:rounded-lg focus:bg-card focus:px-3 focus:py-2">Skip to content</a>
-      <aside className={cn('hidden shrink-0 border-r border-border bg-card transition-[width] duration-200 lg:block', collapsed ? 'w-[76px]' : 'w-[252px]')}><Side mini={collapsed} /></aside>
+      <aside className={cn('hidden shrink-0 border-r border-border bg-card transition-[width] duration-200', isSplit ? 'md:block' : 'lg:block', collapsed || (isSplit && !window.matchMedia?.('(min-width:1024px)').matches) ? 'w-[76px]' : 'w-[252px]')}><Side mini={collapsed || (isSplit && !window.matchMedia?.('(min-width:1024px)').matches)} /></aside>
       {drawer && (
         <div className="fixed inset-0 z-[80] bg-charcoal/30 lg:hidden" onClick={() => setDrawer(false)}>
           <aside className="h-full w-[272px] animate-fade-up bg-card shadow-lift" onClick={(e) => e.stopPropagation()}><Side mini={false} /></aside>
@@ -110,7 +111,7 @@ export function Layout() {
           {immersive ? <Outlet /> : <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6"><Outlet /></div>}
         </main>
         {!immersive && <MobileNav onMore={() => setDrawer(true)} />}
-        {immersive && <button className="fixed bottom-3 left-3 z-30 grid h-10 w-10 place-items-center rounded-full bg-card shadow-lift lg:hidden" onClick={() => setDrawer(true)} aria-label="Open navigation"><Menu className="size-4" /></button>}
+        {immersive && <button className={cn('fixed bottom-3 left-3 z-30 grid h-10 w-10 place-items-center rounded-full bg-card shadow-lift lg:hidden', isSplit && 'md:hidden')} onClick={() => setDrawer(true)} aria-label="Open navigation"><Menu className="size-4" /></button>}
       </div>
       <HelpCentre open={help} onOpenChange={setHelp} />
     </div>
@@ -256,7 +257,7 @@ function Notifications() {
   );
 }
 
-const SHORTCUTS: [string, string][] = [['P', 'Ballpoint pen'], ['E', 'Eraser'], ['V', 'Select'], ['L', 'Lasso'], ['T', 'Text'], ['H', 'Pan'], ['Ctrl/⌘ Z', 'Undo'], ['Ctrl/⌘ Shift Z', 'Redo'], ['Ctrl/⌘ D', 'Duplicate'], ['Delete', 'Delete selection'], ['Tab / Enter', 'Mind map: add branch / sibling'], ['← →', 'Previous / next page'], ['Ctrl/⌘ K', 'Search']];
+const SHORTCUTS: [string, string][] = [['P', 'Ballpoint pen'], ['E', 'Eraser'], ['V', 'Select'], ['L', 'Lasso'], ['T', 'Text'], ['H', 'Pan'], ['Ctrl/⌘ Z', 'Undo'], ['Ctrl/⌘ Shift Z', 'Redo'], ['Two-finger tap', 'Undo (touch screens)'], ['Three-finger tap', 'Redo (touch screens)'], ['Ctrl/⌘ D', 'Duplicate'], ['Delete', 'Delete selection'], ['Tab / Enter', 'Mind map: add branch / sibling'], ['← →', 'Previous / next page'], ['Ctrl/⌘ K', 'Search']];
 export function HelpCentre({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

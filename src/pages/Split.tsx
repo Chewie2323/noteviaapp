@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Columns2, Rows2, Plus, X, ArrowLeftRight, Maximize2, Minimize2 } from 'lucide-react';
+import { ArrowLeft, Columns2, Rows2, Plus, X, ArrowLeftRight, Maximize2, Minimize2, PenLine, NotebookPen } from 'lucide-react';
 import { useApp } from '@/lib/app';
 import { useMediaQuery, useRow } from '@/lib/hooks';
 import type { Assignment, DocumentRow, Notebook, ResourceLink, Submission } from '@/lib/types';
@@ -10,6 +10,7 @@ import { Empty, FullSpinner } from '@/components/common';
 import { ResourcePicker } from '@/components/ResourcePicker';
 import { Viewer } from '@/components/Viewer';
 import { fileKind, cn } from '@/lib/utils';
+import { createNotebook, createWhiteboard } from '@/lib/actions';
 import NotebookEditor from './NotebookEditor';
 import WhiteboardEditor from './WhiteboardEditor';
 import PdfAnnotator from './PdfAnnotator';
@@ -67,6 +68,13 @@ export default function Split() {
   const dragging = useRef(false);
 
   const setPane = (side: 'left' | 'right', v: PaneRef) => { const p = new URLSearchParams(params); if (v) p.set(side, `${v.type}:${v.id}`); else p.delete(side); setParams(p, { replace: true }); };
+  const createHere = async (side: 'left' | 'right', kind: 'whiteboard' | 'notebook') => {
+    try {
+      const n = kind === 'whiteboard' ? await createWhiteboard(app.user) : await createNotebook(app.user, { title: 'Untitled notebook', template: 'blank' });
+      app.log('created', 'notebook', n.id, n.title);
+      setPane(side, { type: 'notebook', id: n.id });
+    } catch (err: any) { app.toast(err?.message || 'Couldn’t create that — please try again'); }
+  };
   const onMove = (e: PointerEvent) => {
     if (!dragging.current || !box.current) return;
     const r = box.current.getBoundingClientRect();
@@ -80,7 +88,11 @@ export default function Split() {
         <div className="grid h-full place-items-center p-6 text-center">
           <div><div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-2xl bg-secondary"><Plus className="size-5 text-lavender-ink" /></div>
             <div className="font-medium">Open something here</div><p className="mb-4 mt-1 text-sm text-muted-foreground">A PDF, slides, a notebook, a whiteboard or a learning resource.</p>
-            <Button onClick={() => setPicking(side)}>Choose…</Button></div>
+            <div className="flex flex-wrap justify-center gap-2">
+              <Button onClick={() => setPicking(side)}>Choose…</Button>
+              <Button variant="outline" onClick={() => createHere(side, 'whiteboard')}><PenLine /> New whiteboard</Button>
+              <Button variant="outline" onClick={() => createHere(side, 'notebook')}><NotebookPen /> New blank notebook</Button>
+            </div></div>
         </div>
       ) : v.type === 'notebook' ? <NotebookPane key={v.id} id={v.id} onClose={() => setPane(side, null)} />
         : v.type === 'document' ? <DocPane key={v.id} id={v.id} onClose={() => setPane(side, null)} />
@@ -90,7 +102,7 @@ export default function Split() {
   );
 
   return (
-    <div className={cn('flex flex-col bg-background', full ? 'fixed inset-0 z-[90]' : 'h-full')}>
+    <div className={cn('flex flex-col bg-background', 'h-full')}>
       <div className="flex items-center gap-2 px-3 py-2 sm:px-4">
         {!full && <Button size="icon" variant="ghost" aria-label="Back" onClick={() => nav(-1)}><ArrowLeft /></Button>}
         <Columns2 className="size-4 text-lavender-deep" /><span className="font-semibold">Split screen</span>

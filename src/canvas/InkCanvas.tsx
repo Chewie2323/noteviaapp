@@ -42,12 +42,14 @@ interface Props {
   tools: ToolState;
   background: CanvasBackground;
   readOnly?: boolean; pencilOnly?: boolean;
+  onUndo?: () => void; onRedo?: () => void; tapUndo?: boolean;   // two-finger tap = undo, three-finger tap = redo
   onRequestMath?: (at: { x: number; y: number } | null, existing?: CanvasObject) => void;
   onHint?: (h: string | null) => void;
   stageRef?: React.MutableRefObject<Konva.Stage | null>;
 }
 
 const SELECTABLE: Tool[] = ['select', 'lasso'];
+const CREATES_ON_DOWN: Tool[] = ['text', 'sticky', 'node', 'table', 'math'];
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
 function strokeHit(o: StrokeObj, px: number, py: number, r: number) {
@@ -89,6 +91,10 @@ export function InkCanvas(p: Props) {
   const pointers = useRef(new Map<number, { x: number; y: number; type: string }>());
   const gesture = useRef<{ dist: number; cx: number; cy: number; view: View } | null>(null);
   const penActive = useRef(false);
+  // multi-finger tap tracking (two fingers = undo, three = redo)
+  const tapG = useRef<{ t0: number; max: number; moved: boolean; start: Map<number, { x: number; y: number }> } | null>(null);
+  const pendingStart = useRef<any>(null);
+  const tapOn = p.tapUndo !== false && !p.readOnly && !!p.onUndo;
   const [erasing, setErasing] = useState<Set<string>>(new Set());
   const [ghost, setGhost] = useState<CanvasObject | null>(null);
   const [band, setBand] = useState<number[] | null>(null);
@@ -147,10 +153,25 @@ export function InkCanvas(p: Props) {
   const pos = () => layer.current!.getRelativePointerPosition()!;
   const evPressure = (e: PointerEvent) => (e.pointerType === 'pen' ? clamp(e.pressure || 0.5, 0.05, 1) : -1);
 
+  const cancelDrawing = () => {
+    drawing.current = null; live.current?.visible(false); live.current?.getLayer()?.batchDraw();
+    setBand(null); setGhost(null); setErasing(new Set());
+  };
+
   const onDown = (e: Konva.KonvaEventObject<PointerEvent>) => {
     const ev = e.evt;
     pointers.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, type: ev.pointerType });
     if (ev.pointerType === 'pen') penActive.current = true;
+    if (ev.pointerType === 'touch' && tapOn && !penActive.current) {
+      const touches = Array.from(pointers.current.values()).filter((v) => v.type === 'touch').length;
+      const now = performance.now();
+      if (touches === 1) tapG.current = { t0: now, max: 1, moved: false, start: new Map([[ev.pointerId, { x: ev.clientX, y: ev.clientY }]]) };
+      else if (tapG.current && now - tapG.current.t0 < 350) {
+        tapG.current.max = Math.max(tapG.current.max, touches); tapG.current.start.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+        clearTimeout(pendingStart.current); cancelDrawing();   // the first finger was the start of a gesture, not a mark
+        if (!board) return;
+      } else tapG.current = null;
+    } else tapG.current = null;
     // two-finger pan / pinch on boards
     if (board && pointers.current.size === 2) {
       drawing.current = null; live.current?.visible(false); setBand(null); setGhost(null);
@@ -165,6 +186,13 @@ export function InkCanvas(p: Props) {
       drawing.current = { kind: 'pan', last: { x: ev.clientX, y: ev.clientY } };
       return;
     }
+    // tools that create an object the instant a finger lands wait briefly, so a two-finger tap never leaves one behind
+    if (ev.pointerType === 'touch' && tapG.current?.max === 1 && CREATES_ON_DOWN.includes(tools.tool)) { pendingStart.current = setTimeout(() => startAction(e), 90); return; }
+    startAction(e);
+  };
+
+  const startAction = (e: Konva.KonvaEventObject<PointerEvent>) => {
+    const ev = e.evt;
     const pt = pos();
     const onObject = !!e.target.findAncestor?.('.obj', true);
     const t = tools.tool;
@@ -214,6 +242,8 @@ export function InkCanvas(p: Props) {
   const onMove = (e: Konva.KonvaEventObject<PointerEvent>) => {
     const ev = e.evt;
     if (pointers.current.has(ev.pointerId)) pointers.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, type: ev.pointerType });
+    const tg = tapG.current, s0 = tg?.start.get(ev.pointerId);
+    if (tg && s0 && Math.hypot(ev.clientX - s0.x, ev.clientY - s0.y) > 12) tg.moved = true;
     if (gesture.current && pointers.current.size === 2) {
       const [a, b] = Array.from(pointers.current.values());
       const g = gesture.current, d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
@@ -261,6 +291,15 @@ export function InkCanvas(p: Props) {
 
   const onUp = (e?: Konva.KonvaEventObject<PointerEvent>) => {
     if (e) { pointers.current.delete(e.evt.pointerId); if (e.evt.pointerType === 'pen') setTimeout(() => { penActive.current = false; }, 600); }
+    const tg = tapG.current;
+    if (e && tg && e.evt.pointerType === 'touch') {
+      if (e.evt.type === 'pointercancel') tapG.current = null;
+      else if (e.evt.type === 'pointerup' && tg.max >= 2 && !Array.from(pointers.current.values()).some((v) => v.type === 'touch')) {
+        tapG.current = null; gesture.current = null;
+        if (!tg.moved && performance.now() - tg.t0 < 400) { if (tg.max === 2) p.onUndo?.(); else if (tg.max === 3) p.onRedo?.(); }
+        return;
+      }
+    }
     if (gesture.current) { if (pointers.current.size < 2) gesture.current = null; return; }
     const d = drawing.current;
     drawing.current = null;

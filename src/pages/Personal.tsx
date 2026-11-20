@@ -170,6 +170,7 @@ export function SettingsPage() {
         <TabsContent value="preferences">
           <div className="rounded-2xl border border-border bg-card px-6 py-2">
             <Row icon={app.dark ? <Moon /> : <Sun />} title="Dark mode" desc="Switch between light and dark appearance"><Switch checked={app.dark} onCheckedChange={app.setDark} aria-label="Dark mode" /></Row>
+            <Row icon={<PenTool />} title="Two-finger tap to undo" desc="Tap the canvas with two fingers to undo, three to redo — like Notability"><Switch checked={settings.tap_undo !== false} onCheckedChange={(v) => setSetting({ tap_undo: v })} aria-label="Two-finger tap to undo" /></Row>
             <Row icon={<PenTool />} title="Stylus-only drawing (palm rejection)" desc="Only Apple Pencil or a stylus writes; fingers scroll and pinch"><Switch checked={!!settings.pencil_only} onCheckedChange={(v) => setSetting({ pencil_only: v })} aria-label="Stylus only" /></Row>
             <Row icon={<Bell />} title="Email reminders" desc="Due-soon and feedback emails (in-app notifications always stay on)"><Switch checked={settings.email_notifications !== false} onCheckedChange={(v) => setSetting({ email_notifications: v })} aria-label="Email reminders" /></Row>
             <Row icon={<Database />} title="Storage" desc={`${formatBytes(used)} of ${formatBytes(STORAGE_LIMIT_BYTES)} used`}><div className="w-40"><Progress value={(used / STORAGE_LIMIT_BYTES) * 100} /></div></Row>
