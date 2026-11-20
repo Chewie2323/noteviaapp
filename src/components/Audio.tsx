@@ -4,7 +4,7 @@ import { db, Bucket } from '@/lib/backend';
 import { cn } from '@/lib/utils';
 
 /** MediaRecorder wrapper — needs HTTPS (or localhost) and microphone permission. */
-export function AudioRecorder({ onDone, label = 'Record' }: { onDone: (blob: Blob, seconds: number) => void; label?: string }) {
+export function AudioRecorder({ onDone, onStart, label = 'Record', autoStart }: { onDone: (blob: Blob, seconds: number) => void; onStart?: (t0: number) => void; label?: string; autoStart?: boolean }) {
   const [rec, setRec] = useState<MediaRecorder | null>(null);
   const [secs, setSecs] = useState(0);
   const [err, setErr] = useState('');
@@ -20,10 +20,11 @@ export function AudioRecorder({ onDone, label = 'Record' }: { onDone: (blob: Blo
       chunks.current = []; r.ondataavailable = (e) => e.data.size && chunks.current.push(e.data);
       const t0 = Date.now();
       r.onstop = () => { stream.getTracks().forEach((t) => t.stop()); clearInterval(timer.current); onDone(new Blob(chunks.current, { type: r.mimeType || 'audio/webm' }), Math.max(1, Math.round((Date.now() - t0) / 1000))); setRec(null); setSecs(0); };
-      r.start(); setRec(r); timer.current = setInterval(() => setSecs((s) => s + 1), 1000);
+      r.start(); setRec(r); setSecs(0); onStart?.(t0); timer.current = setInterval(() => setSecs((s) => s + 1), 1000);
     } catch (e: any) { setErr(e?.name === 'NotAllowedError' ? 'Microphone permission was blocked.' : 'Recording isn’t available in this browser or context.'); }
   };
   useEffect(() => () => clearInterval(timer.current), []);
+  useEffect(() => { if (autoStart) start(); /* eslint-disable-next-line */ }, []);
   return (
     <div className="inline-flex flex-col">
       {rec ? (
@@ -38,16 +39,31 @@ export function AudioRecorder({ onDone, label = 'Record' }: { onDone: (blob: Blo
   );
 }
 
-export function AudioChip({ bucket, path, label, duration }: { bucket: Bucket; path: string; label: string; duration?: number }) {
+export type ChipHandle = { seek: (ms: number) => void };
+
+export function AudioChip({ bucket, path, label, duration, onTime, chipRef }: { bucket: Bucket; path: string; label: string; duration?: number; onTime?: (ms: number | null) => void; chipRef?: (h: ChipHandle | null) => void }) {
   const [playing, setPlaying] = useState(false);
   const a = useRef<HTMLAudioElement | null>(null);
-  const toggle = async () => {
-    try {
-      if (!a.current) { a.current = new Audio(await db.fileUrl(bucket, path)); a.current.onended = () => setPlaying(false); }
-      if (playing) { a.current.pause(); setPlaying(false); } else { await a.current.play(); setPlaying(true); }
-    } catch { setPlaying(false); }
+  const raf = useRef<number>();
+  const tick = () => { if (a.current) onTime?.(a.current.currentTime * 1000); raf.current = requestAnimationFrame(tick); };
+  const stopTick = () => { if (raf.current) cancelAnimationFrame(raf.current); raf.current = undefined; };
+  const ensure = async () => {
+    if (!a.current) {
+      a.current = new Audio(await db.fileUrl(bucket, path));
+      a.current.onended = () => { setPlaying(false); stopTick(); onTime?.(null); };
+      a.current.onpause = () => { setPlaying(false); stopTick(); };
+      a.current.onplay = () => { setPlaying(true); stopTick(); tick(); };
+    }
+    return a.current;
   };
-  useEffect(() => () => a.current?.pause(), []);
+  const toggle = async () => {
+    try { const el = await ensure(); if (playing) el.pause(); else await el.play(); } catch { setPlaying(false); }
+  };
+  useEffect(() => {
+    chipRef?.({ seek: async (ms) => { try { const el = await ensure(); el.currentTime = Math.max(0, ms / 1000 - 0.5); onTime?.(el.currentTime * 1000); await el.play(); } catch { /* ignore */ } } });
+    return () => { chipRef?.(null); stopTick(); a.current?.pause(); onTime?.(null); };
+    // eslint-disable-next-line
+  }, [path]);
   return (
     <button onClick={toggle} className={cn('inline-flex items-center gap-2 rounded-full bg-secondary py-1 pl-1.5 pr-3 text-xs font-medium text-lavender-ink dark:text-lavender hover:brightness-95')}>
       <span className="grid h-6 w-6 place-items-center rounded-full bg-lavender text-charcoal">{playing ? <Pause className="size-3" /> : <Play className="ml-0.5 size-3" />}</span>

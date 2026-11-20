@@ -93,7 +93,7 @@ export interface PlatformSettings { id: string; allow_registration: boolean; def
 export interface BaseObj { id: string; x: number; y: number; rotation?: number; scaleX?: number; scaleY?: number; opacity?: number }
 export type PenKind = 'ballpoint' | 'fountain' | 'pencil' | 'highlighter';
 /** points: flat [x, y, pressure, x, y, pressure, ...] */
-export interface StrokeObj extends BaseObj { type: 'stroke'; pen: PenKind; points: number[]; color: string; size: number }
+export interface StrokeObj extends BaseObj { type: 'stroke'; pen: PenKind; points: number[]; color: string; size: number; rec?: { clip: string; ms: number } }
 export interface TextObj extends BaseObj { type: 'text'; text: string; fontSize: number; color: string; width: number; bold?: boolean; italic?: boolean; underline?: boolean; highlight?: string | null; align?: 'left' | 'center' | 'right' }
 export type ShapeKind = 'rect' | 'ellipse' | 'diamond' | 'triangle' | 'rounded' | 'parallelogram' | 'line' | 'arrow';
 export interface ShapeObj extends BaseObj { type: 'shape'; shape: ShapeKind; w: number; h: number; stroke: string; fill: string | null; size: number; dash?: boolean; label?: string }

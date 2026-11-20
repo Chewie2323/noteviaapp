@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { nanoid } from 'nanoid';
 import {
   ArrowLeft, Plus, Copy, Trash2, ChevronUp, ChevronDown, Maximize2, Minimize2, Columns2, FileDown, Mic, MessageSquare, Share2, Star,
@@ -75,6 +75,13 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
   const [mathAt, setMathAt] = useState<{ at: { x: number; y: number } | null; obj?: MathObj } | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [busy, setBusy] = useState('');
+  const [sp, setSp] = useSearchParams();
+  const [autoRec] = useState(() => sp.get('record') === '1');
+  const recRef = useRef<{ clip: string; t0: number } | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [seekMode, setSeekMode] = useState(false);
+  const [playMs, setPlayMs] = useState<{ clip: string; ms: number } | null>(null);
+  const chips = useRef<Record<string, { seek: (ms: number) => void } | null>>({});
   const hist = useHistory();
   const saver = useSaver();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -176,12 +183,16 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
   };
   const onAudio = async (blob: Blob, secs: number) => {
     if (!nb || !page) return;
-    const cid = nanoid(8), path = `${nb.owner_id}/nb/${nb.id}/${cid}.${blob.type.includes('mp4') ? 'm4a' : 'webm'}`;
+    const cid = recRef.current?.clip || nanoid(8), path = `${nb.owner_id}/nb/${nb.id}/${cid}.${blob.type.includes('mp4') ? 'm4a' : 'webm'}`;
     await db.upload('audio', path, blob);
     const clip: AudioClip = { id: cid, storage_path: path, label: `Recording ${(page.audio?.length || 0) + 1}`, duration: secs, created_at: now() };
-    patchPage({ audio: [...(page.audio || []), clip] });
-    app.toast('Recording attached to this page');
+    recRef.current = null; setRecording(false);
+    // attach to the current page and to every page that has writing made during this recording
+    const next = (pages || []).map((p, i) => (i === active || p.objects.some((o: any) => o.rec?.clip === cid)) ? { ...p, audio: [...(p.audio || []), { ...clip, label: `Recording ${(p.audio?.length || 0) + 1}` }] } : p);
+    setPages(next); next.forEach((p, i) => { if (p !== (pages || [])[i]) persist(p); });
+    app.toast('Lesson recording saved — tap “Tap writing to jump” to replay it');
   };
+  const onAudioRef = useRef(onAudio); onAudioRef.current = onAudio;
   const uploadTemplate = async (f: File) => {
     try {
       setBusy('template');
@@ -309,6 +320,7 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
         )}
 
         <div className="flex min-w-0 flex-1 flex-col">
+          {editable && !embedded && <div className="fixed bottom-4 left-4 z-30 rounded-2xl bg-card/90 p-1.5 shadow-lift backdrop-blur"><AudioRecorder autoStart={autoRec} label="Record lesson" onStart={(t0) => { recRef.current = { clip: nanoid(8), t0 }; setRecording(true); }} onDone={(b, n) => onAudioRef.current(b, n)} /></div>}
           <div ref={scrollRef} data-scroll className="flex-1 overflow-auto rounded-2xl">
             <div className="flex min-w-fit justify-center p-4">
               {page && (
@@ -316,7 +328,9 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
                   <InkCanvas key={page.id} width={dims.w} height={dims.h} zoom={zoom} objects={page.objects} onCommit={(o) => setObjects(o)}
                     selected={selected} onSelect={setSelected} tools={tools} readOnly={!editable} pencilOnly={!!app.user.settings?.pencil_only} onUndo={undo} onRedo={redo} tapUndo={app.user.settings?.tap_undo !== false}
                     background={{ kind: 'template', template: page.template, customImage: bgImg }} onHint={setHint}
-                    onRequestMath={(at, existing) => setMathAt({ at, obj: existing as MathObj })} />
+                    onRequestMath={(at, existing) => setMathAt({ at, obj: existing as MathObj })}
+                    recClock={() => (recRef.current ? { clip: recRef.current.clip, ms: Date.now() - recRef.current.t0 } : null)}
+                    playback={playMs} seekMode={seekMode} onSeek={(r) => chips.current[r.clip]?.seek(r.ms)} />
                 </div>
               )}
             </div>
@@ -344,11 +358,11 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
                   {panel === 'audio' && (
                     <div className="space-y-4 p-4">
                       <p className="text-xs text-muted-foreground">Recordings attach to <b>page {active + 1}</b> and are stored privately with this notebook.</p>
-                      {editable && <AudioRecorder onDone={onAudio} label="Record audio" />}
+                      <button onClick={() => setSeekMode((v) => !v)} className={`rounded-xl px-3 py-2 text-sm font-medium ${seekMode ? 'bg-charcoal text-white' : 'bg-secondary'}`}>{seekMode ? 'Tap writing to jump: ON' : 'Tap writing to jump'}</button>
                       <div className="space-y-2">
                         {(page?.audio || []).map((a) => (
                           <div key={a.id} className="flex items-center gap-2">
-                            <AudioChip bucket="audio" path={a.storage_path} label={a.label} duration={a.duration} />
+                            <AudioChip bucket="audio" path={a.storage_path} label={a.label} duration={a.duration} chipRef={(h) => { chips.current[a.id] = h; }} onTime={(ms) => setPlayMs(ms == null ? null : { clip: a.id, ms })} />
                             <span className="text-[11px] text-muted-foreground">{timeAgo(a.created_at)}</span>
                             {editable && <>
                               <button className="text-xs text-muted-foreground hover:text-foreground" onClick={async () => { const n = await ask.prompt('Rename recording', a.label); if (n) patchPage({ audio: page!.audio.map((x) => (x.id === a.id ? { ...x, label: n } : x)) }); }}>Rename</button>

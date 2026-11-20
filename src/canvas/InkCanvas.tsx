@@ -47,6 +47,12 @@ interface Props {
   onRequestMath?: (at: { x: number; y: number } | null, existing?: CanvasObject) => void;
   onHint?: (h: string | null) => void;
   stageRef?: React.MutableRefObject<Konva.Stage | null>;
+  /** lesson recording: stamp new strokes with the time they were written */
+  recClock?: () => { clip: string; ms: number } | null;
+  /** lesson playback: strokes written after this moment are dimmed */
+  playback?: { clip: string; ms: number } | null;
+  /** tap a stroke to jump the audio to when it was written */
+  seekMode?: boolean; onSeek?: (rec: { clip: string; ms: number }) => void;
 }
 
 const SELECTABLE: Tool[] = ['select', 'lasso'];
@@ -161,6 +167,7 @@ export function InkCanvas(p: Props) {
 
   const onDown = (e: Konva.KonvaEventObject<PointerEvent>) => {
     const ev = e.evt;
+    if (p.seekMode) return;
     pointers.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, type: ev.pointerType });
     if (ev.pointerType === 'pen') penActive.current = true;
     if (ev.pointerType === 'touch' && tapOn && !penActive.current) {
@@ -200,7 +207,7 @@ export function InkCanvas(p: Props) {
     const t = ev.pointerType === 'pen' && !readOnly && ((ev.buttons & 32) || (ev.buttons & 2)) && ['pen', 'highlighter'].includes(tools.tool) ? 'eraser' : tools.tool;
     if (t === 'pen') {
       const pen = tools.pen;
-      drawing.current = { kind: 'pen', pen, points: [pt.x, pt.y, evPressure(ev)], pointerId: ev.pointerId };
+      drawing.current = { kind: 'pen', pen, points: [pt.x, pt.y, evPressure(ev)], pointerId: ev.pointerId, rec: p.recClock?.() || undefined };
       const l = live.current!;
       l.setAttr('nvStroke', { id: 'live', type: 'stroke', pen, x: 0, y: 0, points: drawing.current.points, color: tools.colors[pen], size: tools.sizes[pen], opacity: pen === 'highlighter' ? PEN_DEFAULTS.highlighter.opacity : tools.opacity * PEN_DEFAULTS[pen].opacity });
       l.visible(true); l.getLayer()?.batchDraw();
@@ -313,6 +320,7 @@ export function InkCanvas(p: Props) {
         id: nanoid(8), type: 'stroke', pen, x: 0, y: 0, points: d.points.map((n: number) => Math.round(n * 100) / 100),
         color: tools.colors[pen], size: tools.sizes[pen],
         opacity: pen === 'highlighter' ? PEN_DEFAULTS.highlighter.opacity : tools.opacity * PEN_DEFAULTS[pen].opacity,
+        ...(d.rec ? { rec: d.rec } : {}),
       };
       p.onCommit([...objects, stroke]);
     } else if (d.kind === 'eraser') {
@@ -354,6 +362,7 @@ export function InkCanvas(p: Props) {
   const scheduleCommit = (extra?: string) => { clearTimeout(ct.current); ct.current = setTimeout(() => commitNodes(extra), 0); };
 
   const onObjDown = (o: CanvasObject, e: any) => {
+    if (p.seekMode) { if (o.type === 'stroke' && (o as StrokeObj).rec) { e.cancelBubble = true; p.onSeek?.((o as StrokeObj).rec!); } return; }
     if (readOnly) return;
     if (tools.tool === 'connector') {
       e.cancelBubble = true;
@@ -393,7 +402,7 @@ export function InkCanvas(p: Props) {
     const common: any = {
       key: o.id, id: isGhost ? undefined : o.id, name: isGhost ? 'ghost' : 'obj', x: o.x, y: o.y,
       rotation: o.rotation || 0, scaleX: o.scaleX ?? 1, scaleY: o.scaleY ?? 1,
-      opacity: erasing.has(o.id) ? 0.15 : o.type === 'stroke' ? 1 : o.opacity ?? 1,
+      opacity: erasing.has(o.id) ? 0.15 : o.type === 'stroke' ? ((o as StrokeObj).rec && p.playback && (o as StrokeObj).rec!.clip === p.playback.clip && (o as StrokeObj).rec!.ms > p.playback.ms ? 0.12 : 1) : o.opacity ?? 1,
       draggable: !readOnly && !isGhost && (tools.tool === 'select' || (tools.tool === 'lasso' && sel)),
       onPointerDown: (e: any) => onObjDown(o, e),
       onDragStart: () => { if (!selected.includes(o.id)) p.onSelect([o.id]); },

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { NotebookPen, Upload, FolderPlus, GraduationCap, Link2, PenLine, ArrowRight, CalendarClock, ClipboardCheck, Activity, KeyRound } from 'lucide-react';
+import { NotebookPen, Upload, FolderPlus, GraduationCap, Link2, PenLine, ArrowRight, CalendarClock, ClipboardCheck, Activity, KeyRound, Mic } from 'lucide-react';
 import { useApp, ask } from '@/lib/app';
 import { useLocalState, useTable } from '@/lib/hooks';
 import { db } from '@/lib/backend';
@@ -68,6 +68,7 @@ export default function Home() {
 
   const actions = [
     { label: 'New Notebook', icon: NotebookPen, bg: '#E4DDFB', on: () => setNewNb(true) },
+    { label: 'Record Lesson', icon: Mic, bg: '#F6D3DC', on: async () => { const n = await createNotebook(app.user, { title: `Lesson ${new Date().toLocaleDateString()}` }); app.log('created', 'notebook', n.id, n.title); nav(`/app/notebooks/${n.id}?record=1`); } },
     { label: 'Upload Document', icon: Upload, bg: '#D6E7F8', on: () => nav('/app/documents?upload=1') },
     { label: 'Create Folder', icon: FolderPlus, bg: '#FDE3D6', on: async () => { const n = await ask.prompt('New folder', '', 'Folder name', 'Create'); if (n) { const f = await createFolder(app.user, n, null); app.toast('Folder created'); nav(`/app/documents?folder=${f.id}`); } } },
     isTeacher ? { label: 'Create Classroom', icon: GraduationCap, bg: '#D5ECE3', on: () => nav('/app/classes?new=1') } : { label: 'Join Classroom', icon: KeyRound, bg: '#D5ECE3', on: () => setJoin(true) },
