@@ -7,7 +7,6 @@ import {
 import { useApp, ask } from '@/lib/app';
 import { useRow, useTable } from '@/lib/hooks';
 import { db, now, supabase, uid } from '@/lib/backend';
-import { publishShared } from '@/lib/actions';
 import type { Announcement, Assignment, CalendarEvent, Classroom, ClassroomMember, DocumentRow, Feedback, Invitation, Notebook, ResourceLink, Share, Submission } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Input, Label, Textarea } from '@/components/ui/input';
@@ -187,7 +186,6 @@ export function ClassroomDetail() {
     const type = p.type as 'document' | 'notebook' | 'link';
     if (shares.some((s) => s.resource_type === type && s.resource_id === p.item.id)) return app.toast('Already shared with this class', 'info');
     if (p.item.owner_id !== app.user.id) return app.toast('You can only share items you own', 'err');
-    await publishShared(type, p.item.id);
     await db.insert('shares', { resource_type: type, resource_id: p.item.id, owner_id: app.user.id, grantee_type: 'classroom', grantee_id: c.id, permission: 'view' });
     await app.notify(members.map((m) => m.user_id), { kind: 'share', title: `New material in ${c.name}: ${p.item.name || p.item.title}`, link: `/app/classes/${c.id}` });
     app.log(`shared “${p.item.name || p.item.title}” with`, 'classroom', c.id, c.name, c.id);

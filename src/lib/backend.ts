@@ -18,11 +18,11 @@ const FORCE_DEMO = import.meta.env.VITE_FORCE_DEMO === 'true';
 
 export const MODE: 'supabase' | 'demo' = !FORCE_DEMO && URL_ && KEY ? 'supabase' : 'demo';
 export const supabase: SupabaseClient | null = MODE === 'supabase' ? createClient(URL_!, KEY!, { auth: { persistSession: true, detectSessionInUrl: true } }) : null;
-export const STORAGE_LIMIT_BYTES = Number(import.meta.env.VITE_STORAGE_LIMIT_MB || 2048) * 1024 * 1024;
+export const STORAGE_LIMIT_BYTES = Number(import.meta.env.VITE_STORAGE_LIMIT_MB || 10240) * 1024 * 1024;
 /**
- * Local-first files (iOS / Android app only): your own documents, notebook images, audio and templates live in the app's private
- * storage on the device — limited only by the device's free space, like Notability. They are copied to the cloud only when you
- * share them (see publishFile). Browsers keep the cloud-first behaviour because Safari can clear web storage it considers unused.
+ * Account sync with an on-device copy (iOS / Android app): everything you save is written to the app's private storage first
+ * (instant, works offline) and then uploaded to your Notevia account in the background, so signing in on another iPad or laptop
+ * shows the same files. Files are downloaded on demand and kept on the device afterwards. Browsers read and write the cloud directly.
  */
 export const LOCAL_FIRST = MODE === 'supabase' && Capacitor.isNativePlatform();
 const LOCAL_BUCKETS = new Set<Bucket>(['documents', 'notebooks', 'audio', 'templates']);
@@ -48,6 +48,28 @@ async function localRead(bucket: Bucket, path: string): Promise<Blob | null> {
 async function localDelete(bucket: Bucket, path: string) {
   try { const { Filesystem, Directory } = await fsMod(); await Filesystem.deleteFile({ path: localPath(bucket, path), directory: Directory.Data }); } catch { /* not on this device */ }
 }
+// uploads waiting for a connection survive app restarts
+const PENDING_KEY = 'nv:pending-sync';
+const pendingList = (): { b: Bucket; p: string }[] => { try { return JSON.parse(localStorage.getItem(PENDING_KEY) || '[]'); } catch { return []; } };
+const setPending = (l: { b: Bucket; p: string }[]) => { try { localStorage.setItem(PENDING_KEY, JSON.stringify(l)); } catch { /* ignore */ } };
+const addPending = (b: Bucket, p: string) => { const l = pendingList(); if (!l.some((x) => x.b === b && x.p === p)) setPending([...l, { b, p }]); };
+const dropPending = (b: Bucket, p: string) => setPending(pendingList().filter((x) => !(x.b === b && x.p === p)));
+let flushing = false;
+async function syncUp(b: Bucket, p: string): Promise<boolean> {
+  if (!supabase) return true;
+  const blob = await localRead(b, p);
+  if (!blob) { dropPending(b, p); return true; }
+  const { error } = await supabase.storage.from(b).upload(p, blob, { upsert: true, contentType: blob.type || undefined });
+  if (error) { console.warn('sync upload failed', b, p, error.message); return false; }
+  dropPending(b, p); return true;
+}
+/** Upload anything still waiting (called on start-up, when the connection returns, and after each save). */
+export async function flushPendingSync() {
+  if (!LOCAL_FIRST || flushing || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+  flushing = true;
+  try { for (const x of pendingList()) await syncUp(x.b, x.p); } finally { flushing = false; }
+}
+if (LOCAL_FIRST && typeof window !== 'undefined') { window.addEventListener('online', () => { flushPendingSync(); }); setTimeout(() => { flushPendingSync(); }, 4000); }
 export const AI_ENABLED = MODE === 'supabase' && import.meta.env.VITE_AI_ENABLED === 'true';
 export const GOOGLE_AUTH = MODE === 'supabase' && import.meta.env.VITE_GOOGLE_AUTH === 'true';
 
@@ -168,7 +190,7 @@ export const db = {
 
   // ----- private storage -----
   async upload(bucket: Bucket, path: string, blob: Blob): Promise<string> {
-    if (isLocal(bucket)) { await localWrite(bucket, path, blob); urlCache.delete(`${bucket}/${path}`); return path; }
+    if (isLocal(bucket)) { await localWrite(bucket, path, blob); urlCache.delete(`${bucket}/${path}`); addPending(bucket, path); flushPendingSync(); return path; }
     if (supabase) {
       const { error } = await supabase.storage.from(bucket).upload(path, blob, { upsert: true, contentType: blob.type || undefined });
       if (error) throw error;
@@ -185,7 +207,8 @@ export const db = {
     }
     if (supabase) {
       const { data, error } = await supabase.storage.from(bucket).download(path);
-      if (error) throw new Error(isLocal(bucket) ? 'This file is stored on another device. Open Notevia there and share it to see it here.' : error.message);
+      if (error) throw new Error(isLocal(bucket) ? 'This file hasn’t finished syncing from your other device yet. Open Notevia there while online, then try again.' : error.message);
+      if (isLocal(bucket)) localWrite(bucket, path, data).catch(() => {});   // keep a copy on this device for next time / offline
       return data;
     }
     const b = (await idbGet(`nv:file:${bucket}/${path}`)) as Blob | undefined;
@@ -198,8 +221,7 @@ export const db = {
     const c = urlCache.get(k);
     if (c && c.exp > Date.now()) return c.url;
     let url: string;
-    const local = isLocal(bucket) ? await localRead(bucket, path) : null;
-    if (local) url = URL.createObjectURL(local);
+    if (isLocal(bucket)) url = URL.createObjectURL(await this.download(bucket, path));
     else if (supabase) {
       const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
       if (error) throw error;
@@ -208,16 +230,8 @@ export const db = {
     urlCache.set(k, { url, exp: Date.now() + 50 * 60 * 1000 });
     return url;
   },
-  /** Copy a file that lives on this device to the cloud so people it is shared with can open it. */
-  async publishFile(bucket: Bucket, path: string) {
-    if (!isLocal(bucket) || !supabase) return;
-    const blob = await localRead(bucket, path);
-    if (!blob) return;
-    const { error } = await supabase.storage.from(bucket).upload(path, blob, { upsert: true, contentType: blob.type || undefined });
-    if (error) throw error;
-  },
   async removeFile(bucket: Bucket, path: string) {
-    if (isLocal(bucket)) await localDelete(bucket, path);
+    if (isLocal(bucket)) { await localDelete(bucket, path); dropPending(bucket, path); }
     if (supabase) await supabase.storage.from(bucket).remove([path]);
     else await idbDel(`nv:file:${bucket}/${path}`);
     urlCache.delete(`${bucket}/${path}`);
