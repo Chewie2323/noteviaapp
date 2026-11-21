@@ -64,7 +64,7 @@ export default function Landing() {
           <nav className="ml-6 hidden gap-6 text-sm text-muted-foreground md:flex"><a href="#features" className="hover:text-foreground">Features</a><a href="#benefits" className="hover:text-foreground">Who it’s for</a><a href="#faq" className="hover:text-foreground">FAQ</a></nav>
           <div className="flex-1" />
           <Button size="icon" variant="ghost" aria-label="Toggle dark mode" onClick={() => setDark(!dark)}>{dark ? <Sun /> : <Moon />}</Button>
-          <Button asChild variant="ghost" className="hidden sm:inline-flex"><Link to="/login">Sign in</Link></Button>
+          <Button asChild variant="ghost"><Link to="/login">Sign in</Link></Button>
           <Button asChild><Link to="/register">Get started</Link></Button>
         </div>
       </header>
