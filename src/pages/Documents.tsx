@@ -6,11 +6,11 @@ import {
 } from 'lucide-react';
 import { useApp, ask } from '@/lib/app';
 import { useLocalState, useTable } from '@/lib/hooks';
-import { db, now, STORAGE_LIMIT_BYTES } from '@/lib/backend';
+import { db, now } from '@/lib/backend';
 import type { DocumentRow, Folder, Notebook, Workspace } from '@/lib/types';
 import { createFolder, createPage, duplicateDocument, trash, uploadDocuments } from '@/lib/actions';
 import { docxToHtml } from '@/lib/office';
-import { ACCEPTED, cn, fileKind, formatBytes, PASTELS, saveBlob, FileKind } from '@/lib/utils';
+import { ACCEPTED, cn, fileKind, PASTELS, saveBlob, FileKind } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -66,7 +66,6 @@ export default function Documents() {
   if (type !== 'all') files = files.filter((d) => fileKind(d.mime_type, d.name) === type);
   if (tag) files = files.filter((d) => (d.tags || []).includes(tag));
   files = [...files].sort((a, b) => (sort === 'name' ? a.name.localeCompare(b.name) : sort === 'size' ? b.size - a.size : a.updated_at < b.updated_at ? 1 : -1));
-  const used = allDocs.filter((d) => d.owner_id === app.user.id).reduce((s, d) => s + d.size, 0);
   const countIn = (fid: string) => docs.filter((d) => d.folder_id === fid).length + folders.filter((f) => f.parent_id === fid).length + nbs.filter((n) => n.folder_id === fid).length;
 
   const doUpload = async (list: File[]) => {
@@ -182,7 +181,6 @@ export default function Documents() {
         {allTags.length > 0 && <NativeSelect aria-label="Tag" className="w-auto" value={tag} onChange={(e) => setTag(e.target.value)}><option value="">All tags</option>{allTags.map((t) => <option key={t} value={t}>#{t}</option>)}</NativeSelect>}
         <NativeSelect aria-label="Sort" className="w-auto" value={sort} onChange={(e) => setSort(e.target.value as any)}><option value="recent">Recently updated</option><option value="name">Name A–Z</option><option value="size">Largest first</option></NativeSelect>
         <ViewToggle value={view} onChange={setView} />
-        <div className="ml-auto w-48 text-[11px] text-muted-foreground"><div className="mb-1 flex justify-between"><span>Your storage</span><span>{formatBytes(used)} / {formatBytes(STORAGE_LIMIT_BYTES)}</span></div><Progress value={(used / STORAGE_LIMIT_BYTES) * 100} /></div>
       </div>
 
       <nav className="mb-4 flex flex-wrap items-center gap-1 text-sm" aria-label="Breadcrumb">
