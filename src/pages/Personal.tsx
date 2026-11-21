@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Users, Star, Download, Trash2, RotateCcw, Settings as SettingsIcon, ShieldCheck, Moon, Sun, PenTool, Database, FileJson, UserX, KeyRound, ExternalLink, Folder as FolderIcon, Link2, Timer, Bell } from 'lucide-react';
+import { Users, Star, Download, Trash2, RotateCcw, Settings as SettingsIcon, ShieldCheck, Moon, Sun, PenTool, Database, FileJson, UserX, KeyRound, ExternalLink, Folder as FolderIcon, Link2, Timer, Bell, Palette, CreditCard, Check } from 'lucide-react';
 import { useApp, ask } from '@/lib/app';
 import { useTable } from '@/lib/hooks';
 import { auth, db, fn, MODE, resetDemo } from '@/lib/backend';
@@ -14,6 +14,8 @@ import { Avatar, ColorDots, Empty, FileBadge, PageHeader, ViewToggle } from '@/c
 import { DocCard, NotebookCard, FolderCard } from '@/components/Cards';
 import { PASTELS, saveBlob, timeAgo } from '@/lib/utils';
 import { useLocalState } from '@/lib/hooks';
+import { ACCENT_PRESETS, DEFAULT_ACCENT, getStoredAccent, resetAccent, setStoredAccent } from '@/lib/theme';
+import { PRESSURE_LEVELS, getPressureLevel, setPressureLevel, type PressureLevel } from '@/canvas/strokes';
 
 export function SharedWithMe() {
   const app = useApp();
@@ -134,6 +136,9 @@ export function SettingsPage() {
   const [pw, setPw] = useState('');
   const [busy, setBusy] = useState('');
   const [confirmText, setConfirmText] = useState('');
+  const [accent, setAccent] = useState(getStoredAccent);
+  const [pressure, setPressure] = useState<PressureLevel>(getPressureLevel);
+  const billingUrl = (import.meta.env.VITE_BILLING_PORTAL_URL as string | undefined)?.trim();
   const settings = u.settings || {};
   const setSetting = async (patch: Record<string, any>) => { await db.update('profiles', u.id, { settings: { ...settings, ...patch } }); await app.refreshUser(); };
   const Row = ({ icon, title, desc, children }: any) => (
@@ -146,7 +151,7 @@ export function SettingsPage() {
     <div className="max-w-3xl animate-fade-up">
       <PageHeader icon={<SettingsIcon />} title="Settings" />
       <Tabs defaultValue={params.get('tab') || 'profile'}>
-        <TabsList><TabsTrigger value="profile">Profile</TabsTrigger><TabsTrigger value="preferences">Preferences</TabsTrigger><TabsTrigger value="security">Security</TabsTrigger><TabsTrigger value="privacy">Privacy & data</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="profile">Profile</TabsTrigger><TabsTrigger value="appearance">Appearance</TabsTrigger><TabsTrigger value="preferences">Preferences</TabsTrigger><TabsTrigger value="subscription">Subscription</TabsTrigger><TabsTrigger value="security">Security</TabsTrigger><TabsTrigger value="privacy">Privacy & data</TabsTrigger></TabsList>
         <TabsContent value="profile">
           <div className="rounded-2xl border border-border bg-card p-6">
             <div className="mb-5 flex items-center gap-4"><Avatar name={p.full_name} color={p.avatar_color} size={60} /><ColorDots colors={PASTELS.slice(0, 8)} value={p.avatar_color} onChange={(c) => setP({ ...p, avatar_color: c })} size={26} /></div>
@@ -166,12 +171,53 @@ export function SettingsPage() {
             <div className="mt-5 flex justify-end"><Button disabled={!p.full_name.trim()} onClick={async () => { await db.update('profiles', u.id, { ...p, full_name: p.full_name.trim() }); await app.refreshUser(); app.toast('Profile saved'); }}>Save profile</Button></div>
           </div>
         </TabsContent>
-        <TabsContent value="preferences">
+        <TabsContent value="appearance">
           <div className="rounded-2xl border border-border bg-card px-6 py-2">
             <Row icon={app.dark ? <Moon /> : <Sun />} title="Dark mode" desc="Switch between light and dark appearance"><Switch checked={app.dark} onCheckedChange={app.setDark} aria-label="Dark mode" /></Row>
+            <div className="py-4">
+              <div className="mb-1 flex items-center gap-2 text-sm font-medium"><Palette className="size-4" /> Accent colour</div>
+              <p className="mb-4 text-xs text-muted-foreground">Pick the colour used for buttons, highlights and selections. Saved on this device.</p>
+              <div className="flex flex-wrap gap-3">
+                {ACCENT_PRESETS.map((c) => (
+                  <button key={c.id} type="button" onClick={() => { setStoredAccent(c.hex, app.dark); setAccent(c.hex); }} aria-label={c.label} aria-pressed={accent.toLowerCase() === c.hex.toLowerCase()}
+                    className="group flex w-16 flex-col items-center gap-1.5 text-[11px] text-muted-foreground">
+                    <span className={`grid h-10 w-10 place-items-center rounded-full ring-offset-2 ring-offset-card transition ${accent.toLowerCase() === c.hex.toLowerCase() ? 'ring-2 ring-primary' : 'group-hover:scale-105'}`} style={{ background: c.hex }}>
+                      {accent.toLowerCase() === c.hex.toLowerCase() && <Check className="size-4 text-white" />}
+                    </span>{c.label}
+                  </button>
+                ))}
+                <label className="group flex w-16 cursor-pointer flex-col items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <span className="relative h-10 w-10 overflow-hidden rounded-full border border-border transition group-hover:scale-105" style={{ background: 'conic-gradient(#f87171,#fbbf24,#a3e635,#22d3ee,#818cf8,#e879f9,#f87171)' }}>
+                    <input type="color" aria-label="Custom accent colour" className="absolute inset-0 cursor-pointer opacity-0" value={accent} onChange={(e) => { setStoredAccent(e.target.value, app.dark); setAccent(e.target.value); }} />
+                  </span>Custom
+                </label>
+              </div>
+              <div className="mt-4 flex items-center gap-3">
+                <Button variant="outline" size="sm" disabled={accent.toLowerCase() === DEFAULT_ACCENT.toLowerCase()} onClick={() => { resetAccent(app.dark); setAccent(DEFAULT_ACCENT); }}>Reset to default</Button>
+                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground"><span className="h-3 w-3 rounded-full bg-primary" /> Preview</span>
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+        <TabsContent value="preferences">
+          <div className="rounded-2xl border border-border bg-card px-6 py-2">
+            <Row icon={<PenTool />} title="Pen pressure sensitivity" desc="How strongly Apple Pencil pressure changes line thickness. Choose Off for an even line. Saved on this device.">
+              <NativeSelect className="w-36" value={pressure} onChange={(e) => { const v = e.target.value as PressureLevel; setPressureLevel(v); setPressure(v); }} aria-label="Pen pressure sensitivity">{(Object.keys(PRESSURE_LEVELS) as PressureLevel[]).map((id) => <option key={id} value={id}>{PRESSURE_LEVELS[id].label}</option>)}</NativeSelect>
+            </Row>
             <Row icon={<PenTool />} title="Two-finger tap to undo" desc="Tap the canvas with two fingers to undo, three to redo — like Notability"><Switch checked={settings.tap_undo !== false} onCheckedChange={(v) => setSetting({ tap_undo: v })} aria-label="Two-finger tap to undo" /></Row>
             <Row icon={<PenTool />} title="Stylus-only drawing (palm rejection)" desc="Only Apple Pencil or a stylus writes; fingers scroll and pinch"><Switch checked={!!settings.pencil_only} onCheckedChange={(v) => setSetting({ pencil_only: v })} aria-label="Stylus only" /></Row>
             <Row icon={<Bell />} title="Email reminders" desc="Due-soon and feedback emails (in-app notifications always stay on)"><Switch checked={settings.email_notifications !== false} onCheckedChange={(v) => setSetting({ email_notifications: v })} aria-label="Email reminders" /></Row>
+          </div>
+        </TabsContent>
+        <TabsContent value="subscription">
+          <div className="rounded-2xl border border-border bg-card px-6 py-2">
+            <Row icon={<CreditCard />} title="Current plan" desc="Your Notevia plan and billing details"><Badge tone="lavender">Free</Badge></Row>
+            <Row icon={<ExternalLink />} title="Manage Subscription" desc={billingUrl ? 'Update your plan, payment method or cancel in the secure billing portal' : 'Billing is not connected yet. Contact support to change your plan.'}>
+              <Button variant="outline" onClick={() => {
+                if (billingUrl) window.open(billingUrl, '_blank', 'noopener,noreferrer');
+                else app.toast(`Billing isn't connected yet${import.meta.env.VITE_SUPPORT_EMAIL ? ` — email ${import.meta.env.VITE_SUPPORT_EMAIL}` : ''}`);
+              }}>Manage Subscription</Button>
+            </Row>
           </div>
         </TabsContent>
         <TabsContent value="security">

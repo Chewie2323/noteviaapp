@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import {
   MousePointer2, Lasso, Hand, PenTool, Pen, Pencil, Highlighter, Eraser, Type, Square, Circle, Diamond, Triangle, RectangleHorizontal, MoveUpRight, Minus,
   Spline, StickyNote, Table2, Sigma, Network, Image as ImageIcon, Undo2, Redo2, ZoomIn, ZoomOut, Trash2, Copy, Bold, Italic, Underline,
@@ -8,7 +8,7 @@ import type { CanvasObject, PenKind, ShapeKind } from '@/lib/types';
 import type { Tool, ToolState } from './InkCanvas';
 import { PEN_DEFAULTS } from './strokes';
 import { cn, HIGHLIGHTS, INK } from '@/lib/utils';
-import { Popover, PopoverContent, PopoverTrigger, Slider, Tooltip } from '@/components/ui/misc';
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger, Slider, Tooltip } from '@/components/ui/misc';
 
 const STICKY = ['#FFF2B3', '#F8D7E2', '#D6EEDF', '#DCE7F7', '#E4DDFB', '#F6E0CF'];
 const NODE = ['#E4DDFB', '#D5ECE3', '#F9D9E6', '#D6E7F8', '#FDE3D6', '#FFFFFF'];
@@ -46,6 +46,7 @@ export function Toolbar(p: ToolbarProps) {
   const { tools, setTools } = p;
   const set = (patch: Partial<ToolState>) => setTools({ ...tools, ...patch });
   const fileRef = useRef<HTMLInputElement>(null);
+  const [panel, setPanel] = useState<string | null>(null);
   const t = tools.tool;
   const pick = (tool: Tool) => set({ tool });
   const activeShape = SHAPES.find((s) => s.id === tools.shape) || SHAPES[0];
@@ -55,8 +56,6 @@ export function Toolbar(p: ToolbarProps) {
   const nodes = sel.filter((o) => o.type === 'node');
   const conns = sel.filter((o) => o.type === 'connector') as any[];
 
-  const palette = t === 'pen' ? (tools.pen === 'highlighter' ? HIGHLIGHTS : INK) : t === 'sticky' ? STICKY : t === 'node' ? NODE : INK;
-  const current = t === 'pen' ? tools.colors[tools.pen] : t === 'sticky' ? tools.stickyColor : t === 'node' ? tools.nodeColor : t === 'text' ? tools.textColor : tools.shapeColor;
   const applyColor = (c: string) => {
     if (t === 'pen') set({ colors: { ...tools.colors, [tools.pen]: c } });
     else if (t === 'sticky') set({ stickyColor: c });
@@ -77,7 +76,14 @@ export function Toolbar(p: ToolbarProps) {
       }
     });
   };
-  const showColors = !['eraser', 'hand', 'select', 'lasso', 'table', 'math'].includes(t) || sel.length > 0;
+  // Notability-style: colours stay hidden until you tap the tool that is already active.
+  const tap = (key: string, active: boolean, activate: () => void) => {
+    if (active) setPanel((x) => (x === key ? null : key));
+    else { activate(); setPanel(null); }
+  };
+  const palFor = (kind: 'pen' | 'highlighter' | 'sticky' | 'node' | 'text') => (kind === 'highlighter' ? HIGHLIGHTS : kind === 'sticky' ? STICKY : kind === 'node' ? NODE : INK);
+  const selPalette = sel.length && sel.every((o) => o.type === 'sticky') ? STICKY : sel.length && sel.every((o) => o.type === 'node') ? NODE : INK;
+  const selColor = (sel[0] as any)?.color ?? (sel[0] as any)?.stroke ?? '#6D60C2';
   const patchTables = (fn: (o: any) => any) => p.onPatch((o) => (o.type === 'table' ? fn(o) : o));
 
   return (
@@ -87,14 +93,30 @@ export function Toolbar(p: ToolbarProps) {
         <TB title="Lasso select (L)" active={t === 'lasso'} onClick={() => pick('lasso')}><Lasso /></TB>
         <TB title="Pan / scroll (H)" active={t === 'hand'} onClick={() => pick('hand')}><Hand /></TB>
         <Sep />
-        {PENS.map(({ id, icon: Ic }) => (
-          <TB key={id} title={`${PEN_DEFAULTS[id].label}${id === 'ballpoint' ? ' (P)' : ''}`} active={t === 'pen' && tools.pen === id} onClick={() => set({ tool: 'pen', pen: id })}>
-            <span className="relative"><Ic /><span className="absolute -bottom-1 left-1/2 h-1 w-3 -translate-x-1/2 rounded-full" style={{ background: tools.colors[id] }} /></span>
-          </TB>
-        ))}
+        {PENS.map(({ id, icon: Ic }) => {
+          const active = t === 'pen' && tools.pen === id;
+          return (
+            <ToolPop key={id} open={panel === `pen-${id}`} onClose={() => setPanel(null)} trigger={
+              <TB title={`${PEN_DEFAULTS[id].label}${id === 'ballpoint' ? ' (P)' : ''}${active ? ' – tap for colour & size' : ''}`} active={active} onClick={() => tap(`pen-${id}`, active, () => set({ tool: 'pen', pen: id }))}>
+                <span className="relative"><Ic /><span className="absolute -bottom-1 left-1/2 h-1 w-3 -translate-x-1/2 rounded-full" style={{ background: tools.colors[id] }} /></span>
+              </TB>}>
+              <ColorPanel palette={palFor(id === 'highlighter' ? 'highlighter' : 'pen')} current={tools.colors[id]} onPick={applyColor}>
+                <Range label="Thickness" min={id === 'highlighter' ? 8 : 1} max={id === 'highlighter' ? 44 : 24} step={0.5} value={tools.sizes[id]} onChange={(v) => set({ sizes: { ...tools.sizes, [id]: v } })} />
+                {id !== 'highlighter' && <Range label="Opacity" min={10} max={100} value={Math.round(tools.opacity * 100)} onChange={(v) => set({ opacity: v / 100 })} suffix="%" />}
+              </ColorPanel>
+            </ToolPop>
+          );
+        })}
         <TB title="Eraser (E)" active={t === 'eraser'} onClick={() => pick('eraser')}><Eraser /></TB>
         <Sep />
-        <TB title="Text (T)" active={t === 'text'} onClick={() => pick('text')}><Type /></TB>
+        <ToolPop open={panel === 'text'} onClose={() => setPanel(null)} trigger={
+          <TB title="Text (T)" active={t === 'text'} onClick={() => tap('text', t === 'text', () => pick('text'))}>
+            <span className="relative"><Type /><span className="absolute -bottom-1 left-1/2 h-1 w-3 -translate-x-1/2 rounded-full" style={{ background: tools.textColor }} /></span>
+          </TB>}>
+          <ColorPanel palette={INK} current={tools.textColor} onPick={applyColor}>
+            <Range label="Text size" min={10} max={72} value={tools.fontSize} onChange={(v) => set({ fontSize: v })} />
+          </ColorPanel>
+        </ToolPop>
         <Popover>
           <PopoverTrigger asChild>
             <button aria-label="Shapes" className={cn('flex h-9 shrink-0 items-center gap-0.5 rounded-xl px-2 [&_svg]:size-[18px]', t === 'shape' ? 'bg-primary text-primary-foreground' : 'text-foreground/70 hover:bg-muted')}>
@@ -106,12 +128,25 @@ export function Toolbar(p: ToolbarProps) {
               <button key={s.id} title={s.label} aria-label={s.label} onClick={() => set({ tool: 'shape', shape: s.id })}
                 className={cn('grid h-11 place-items-center rounded-lg hover:bg-muted', tools.shape === s.id && t === 'shape' && 'bg-secondary')}><s.icon className="size-5" /></button>
             ))}
+            <div className="col-span-4 mt-1 border-t border-border pt-2">
+              <ColorPanel bare palette={INK} current={tools.shapeColor} onPick={(c) => (t === 'shape' ? applyColor(c) : set({ shapeColor: c, textColor: c }))}>
+                <Range label="Line" min={1} max={12} value={tools.shapeSize} onChange={(v) => set({ shapeSize: v })} />
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" className="accent-primary" checked={!!tools.fill} onChange={(e) => set({ fill: e.target.checked ? '#E4DDFB' : null })} /> Fill</label>
+                  <label className="flex items-center gap-1.5 text-xs"><input type="checkbox" className="accent-primary" checked={tools.dash} onChange={(e) => set({ dash: e.target.checked })} /> Dashed</label>
+                </div>
+              </ColorPanel>
+            </div>
             <p className="col-span-4 px-1 pt-1 text-[11px] text-muted-foreground">Hold Shift for squares & circles. Double-tap a shape to label it.</p>
           </PopoverContent>
         </Popover>
         <TB title="Connector: link two objects" active={t === 'connector'} onClick={() => pick('connector')}><Spline /></TB>
-        <TB title="Sticky note" active={t === 'sticky'} onClick={() => pick('sticky')}><StickyNote /></TB>
-        <TB title="Mind-map node" active={t === 'node'} onClick={() => pick('node')}><Network /></TB>
+        <ToolPop open={panel === 'sticky'} onClose={() => setPanel(null)} trigger={<TB title="Sticky note" active={t === 'sticky'} onClick={() => tap('sticky', t === 'sticky', () => pick('sticky'))}><StickyNote /></TB>}>
+          <ColorPanel palette={STICKY} current={tools.stickyColor} onPick={applyColor} noCustom />
+        </ToolPop>
+        <ToolPop open={panel === 'node'} onClose={() => setPanel(null)} trigger={<TB title="Mind-map node" active={t === 'node'} onClick={() => tap('node', t === 'node', () => pick('node'))}><Network /></TB>}>
+          <ColorPanel palette={NODE} current={tools.nodeColor} onPick={applyColor} noCustom />
+        </ToolPop>
         <TB title="Table" active={t === 'table'} onClick={() => pick('table')}><Table2 /></TB>
         <TB title="Equation (LaTeX)" active={t === 'math'} onClick={() => pick('math')}><Sigma /></TB>
         {p.onImage && <TB title="Insert image" onClick={() => fileRef.current?.click()}><ImageIcon /></TB>}
@@ -131,29 +166,10 @@ export function Toolbar(p: ToolbarProps) {
       </div>
 
       <div className="flex min-h-[46px] items-center gap-2 overflow-x-auto no-scrollbar rounded-2xl border border-border bg-card/80 px-3 py-1.5 backdrop-blur">
-        {showColors && (
-          <div className="flex shrink-0 items-center gap-1.5">
-            {palette.map((c) => (
-              <button key={c} aria-label={`Colour ${c}`} onClick={() => applyColor(c)}
-                className={cn('h-6 w-6 rounded-full border border-black/5 transition ring-offset-2 ring-offset-card', current === c && 'scale-110 ring-2 ring-[#6D60C2]')} style={{ background: c }} />
-            ))}
-            <label className="relative h-6 w-6 cursor-pointer overflow-hidden rounded-full border border-border" title="Custom colour" style={{ background: 'conic-gradient(#f87171,#fbbf24,#a3e635,#22d3ee,#818cf8,#e879f9,#f87171)' }}>
-              <input type="color" aria-label="Custom colour" className="absolute inset-0 opacity-0" onChange={(e) => applyColor(e.target.value)} />
-            </label>
-          </div>
-        )}
-        {t === 'pen' && <>
-          <Range label="Thickness" min={tools.pen === 'highlighter' ? 8 : 1} max={tools.pen === 'highlighter' ? 44 : 24} step={0.5} value={tools.sizes[tools.pen]} onChange={(v) => set({ sizes: { ...tools.sizes, [tools.pen]: v } })} />
-          {tools.pen !== 'highlighter' && <Range label="Opacity" min={10} max={100} value={Math.round(tools.opacity * 100)} onChange={(v) => set({ opacity: v / 100 })} suffix="%" />}
-          <span className="hidden shrink-0 text-xs text-muted-foreground xl:inline">{tools.pen === 'highlighter' ? 'Hold Shift for a straight line' : 'Pressure-sensitive with Apple Pencil & styluses'}</span>
-        </>}
-        {t === 'shape' && <>
-          <Range label="Line" min={1} max={12} value={tools.shapeSize} onChange={(v) => set({ shapeSize: v })} />
-          <label className="flex shrink-0 items-center gap-1.5 text-xs"><input type="checkbox" className="accent-[#6D60C2]" checked={!!tools.fill} onChange={(e) => set({ fill: e.target.checked ? '#E4DDFB' : null })} /> Fill</label>
-          <label className="flex shrink-0 items-center gap-1.5 text-xs"><input type="checkbox" className="accent-[#6D60C2]" checked={tools.dash} onChange={(e) => set({ dash: e.target.checked })} /> Dashed</label>
-        </>}
+        {t === 'pen' && <span className="shrink-0 text-xs text-muted-foreground">{tools.pen === 'highlighter' ? 'Hold Shift for a straight line · ' : ''}Tap the pen again for colour &amp; thickness</span>}
+        {t === 'text' && !sel.length && <span className="shrink-0 text-xs text-muted-foreground">Tap the Text tool again for colour &amp; size</span>}
+        {t === 'shape' && <span className="shrink-0 text-xs text-muted-foreground">Open the Shapes menu for colour, line, fill &amp; dashes</span>}
         {t === 'eraser' && <><Range label="Eraser size" min={4} max={60} value={tools.eraserSize} onChange={(v) => set({ eraserSize: v })} /><span className="shrink-0 text-xs text-muted-foreground">Erases handwriting and highlights it touches</span></>}
-        {t === 'text' && <Range label="Text size" min={10} max={72} value={tools.fontSize} onChange={(v) => set({ fontSize: v })} />}
         {(t === 'table' || t === 'math' || t === 'node' || t === 'sticky' || t === 'connector' || t === 'hand') && !sel.length && (
           <span className="shrink-0 text-xs text-muted-foreground">{p.hint || ({ table: 'Tap the page to place a table · double-tap a cell to type', math: 'Tap where the equation should go', node: 'Tap to add a central idea · select a node and press Tab to add a branch', sticky: 'Tap to place a sticky note', connector: 'Tap the first object, then the second', hand: 'Drag to move around · two fingers to pinch-zoom on boards' } as any)[t]}</span>
         )}
@@ -162,6 +178,14 @@ export function Toolbar(p: ToolbarProps) {
         {sel.length > 0 && (
           <div className="ml-auto flex shrink-0 items-center gap-0.5 border-l border-border pl-2">
             <span className="mr-1 text-xs text-muted-foreground">{sel.length} selected</span>
+            {!sel.every((o) => o.type === 'table' || o.type === 'image') && (
+              <ToolPop open={panel === 'sel'} onClose={() => setPanel(null)} align="end" trigger={
+                <button type="button" aria-label="Colour of selection" title="Colour" onClick={() => setPanel((x) => (x === 'sel' ? null : 'sel'))} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl hover:bg-muted">
+                  <span className="h-5 w-5 rounded-full border border-black/10" style={{ background: selColor }} />
+                </button>}>
+                <ColorPanel palette={selPalette} current={selColor} onPick={applyColor} noCustom={selPalette !== INK} />
+              </ToolPop>
+            )}
             {texts.length > 0 && <>
               <TB title="Bold" active={texts.every((x) => x.bold)} onClick={() => p.onPatch((o) => (o.type === 'text' ? { ...o, bold: !texts.every((x) => x.bold) } : o))}><Bold /></TB>
               <TB title="Italic" active={texts.every((x) => x.italic)} onClick={() => p.onPatch((o) => (o.type === 'text' ? { ...o, italic: !texts.every((x) => x.italic) } : o))}><Italic /></TB>
@@ -207,6 +231,37 @@ function Range({ label, min, max, value, onChange, suffix = '', step = 1 }: { la
       {label}
       <Slider className="w-24" min={min} max={max} step={step} value={[value]} onValueChange={([v]) => onChange(v)} aria-label={label} />
       <span className="w-9 tabular-nums">{Math.round(value * 10) / 10}{suffix}</span>
+    </div>
+  );
+}
+
+function ToolPop({ open, onClose, trigger, children, align = 'start' }: { open: boolean; onClose: () => void; trigger: React.ReactNode; children: React.ReactNode; align?: 'start' | 'end' | 'center' }) {
+  return (
+    <Popover open={open} onOpenChange={(o) => !o && onClose()}>
+      <PopoverAnchor asChild><span data-tool-anchor className="relative inline-flex shrink-0">{trigger}</span></PopoverAnchor>
+      <PopoverContent align={align} className="w-72 p-3" onOpenAutoFocus={(e) => e.preventDefault()}
+        onInteractOutside={(e) => { if ((e.target as HTMLElement | null)?.closest?.('[data-tool-anchor]')) e.preventDefault(); }}>
+        {children}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ColorPanel({ palette, current, onPick, children, noCustom, bare }: { palette: string[]; current: string; onPick: (c: string) => void; children?: React.ReactNode; noCustom?: boolean; bare?: boolean }) {
+  return (
+    <div className={cn('flex flex-col gap-3', bare && 'px-0')}>
+      <div className="flex flex-wrap items-center gap-2">
+        {palette.map((c) => (
+          <button key={c} type="button" aria-label={`Colour ${c}`} onClick={() => onPick(c)}
+            className={cn('h-7 w-7 rounded-full border border-black/5 transition ring-offset-2 ring-offset-popover', current.toLowerCase() === c.toLowerCase() && 'scale-110 ring-2 ring-primary')} style={{ background: c }} />
+        ))}
+        {!noCustom && (
+          <label className="relative h-7 w-7 cursor-pointer overflow-hidden rounded-full border border-border" title="Custom colour" style={{ background: 'conic-gradient(#f87171,#fbbf24,#a3e635,#22d3ee,#818cf8,#e879f9,#f87171)' }}>
+            <input type="color" aria-label="Custom colour" className="absolute inset-0 opacity-0" value={/^#[0-9a-f]{6}$/i.test(current) ? current : '#000000'} onChange={(e) => onPick(e.target.value)} />
+          </label>
+        )}
+      </div>
+      {children}
     </div>
   );
 }

@@ -93,7 +93,7 @@ export function Progress({ value, className }: { value: number; className?: stri
 export function ColorDots({ colors, value, onChange, size = 28 }: { colors: string[]; value: string; onChange: (c: string) => void; size?: number }) {
   return (
     <div className="flex flex-wrap gap-2" role="radiogroup">
-      {colors.map((c) => <button key={c} type="button" role="radio" aria-checked={value === c} aria-label={c} onClick={() => onChange(c)} className={cn('rounded-lg border border-black/5 transition', value === c && 'ring-2 ring-[#6D60C2] ring-offset-2 ring-offset-card')} style={{ width: size, height: size, background: c }} />)}
+      {colors.map((c) => <button key={c} type="button" role="radio" aria-checked={value === c} aria-label={c} onClick={() => onChange(c)} className={cn('rounded-lg border border-black/5 transition', value === c && 'ring-2 ring-primary ring-offset-2 ring-offset-card')} style={{ width: size, height: size, background: c }} />)}
     </div>
   );
 }

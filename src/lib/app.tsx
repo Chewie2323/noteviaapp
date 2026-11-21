@@ -4,6 +4,7 @@ import { auth, db, startRealtime } from './backend';
 import { useTable } from './hooks';
 import type { Assignment, Classroom, ClassroomMember, Favourite, Folder, Profile, RecentItem, ResourceType, Share, Submission } from './types';
 import { AccessContext, accessFor, memberClassroomIds } from './access';
+import { syncAccent } from './theme';
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -71,7 +72,7 @@ export const ask = {
 // ---------------- theme ----------------
 export function useTheme() {
   const [dark, setDark] = useState(() => localStorage.getItem('nv-theme') === 'dark');
-  useEffect(() => { document.documentElement.classList.toggle('dark', dark); localStorage.setItem('nv-theme', dark ? 'dark' : 'light'); }, [dark]);
+  useEffect(() => { document.documentElement.classList.toggle('dark', dark); localStorage.setItem('nv-theme', dark ? 'dark' : 'light'); syncAccent(dark); }, [dark]);
   return [dark, setDark] as const;
 }
 

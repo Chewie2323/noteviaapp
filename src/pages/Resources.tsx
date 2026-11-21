@@ -164,7 +164,7 @@ function LinkDialog({ initial, folders, onClose }: { initial: Partial<ResourceLi
                 <div><Label>Folder</Label><NativeSelect value={v.folder_id || ''} onChange={(e) => set({ folder_id: e.target.value || null })}><option value="">No folder</option>{folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}</NativeSelect></div>
               </div>
               <div><Label hint="optional, https only">Thumbnail image URL</Label><Input value={v.thumbnail_url || ''} onChange={(e) => set({ thumbnail_url: e.target.value || null })} placeholder="Automatic for YouTube" /></div>
-              <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#6D60C2]" checked={!!v.embeddable} onChange={(e) => set({ embeddable: e.target.checked })} /> Embed inside Notevia when the site allows it</label>
+              <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-primary" checked={!!v.embeddable} onChange={(e) => set({ embeddable: e.target.checked })} /> Embed inside Notevia when the site allows it</label>
             </div>
             <div><Label>Preview</Label><LinkThumb l={{ thumbnail_url: v.thumbnail_url || null, provider: v.provider || 'Website', url: v.url || 'https://example.com', title: v.title || '' }} /><div className="mt-2 text-sm font-medium">{v.title || 'Title'}</div><div className="text-xs text-muted-foreground">{v.description}</div></div>
           </div>

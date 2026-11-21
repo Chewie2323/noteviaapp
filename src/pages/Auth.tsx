@@ -150,7 +150,7 @@ export function Register() {
         <div><Label htmlFor="pw" hint="at least 8 characters">Password</Label><Input id="pw" type="password" required minLength={8} autoComplete="new-password" value={v.password} onChange={(e) => setV({ ...v, password: e.target.value })} /></div>
         {v.role !== 'student' && <div><Label htmlFor="org" hint="optional">Organisation</Label><Input id="org" maxLength={120} value={v.organisation} onChange={(e) => setV({ ...v, organisation: e.target.value })} /></div>}
         {v.role === 'student' && !invite && <div><Label htmlFor="code" hint="optional">Classroom code</Label><Input id="code" className="uppercase" maxLength={10} value={v.code} onChange={(e) => setV({ ...v, code: e.target.value })} placeholder="e.g. 7K2Q9XA" /></div>}
-        <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5 accent-[#6D60C2]" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> I agree to the <Link to="/terms" className="underline">Terms of service</Link> and <Link to="/privacy" className="underline">Privacy policy</Link>.</label>
+        <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5 accent-primary" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> I agree to the <Link to="/terms" className="underline">Terms of service</Link> and <Link to="/privacy" className="underline">Privacy policy</Link>.</label>
         {err && <p className="text-sm text-red-600" role="alert">{err}</p>}
         <Button className="w-full" disabled={busy}>{busy && <Loader2 className="animate-spin" />} Create account</Button>
       </form>

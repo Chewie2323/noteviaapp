@@ -4,10 +4,11 @@ import type Konva from 'konva';
 import { nanoid } from 'nanoid';
 import type { CanvasObject, ConnectorObj, PenKind, ShapeKind, StrokeObj, TableObj, TemplateId } from '@/lib/types';
 import { drawBoardBackground, drawTemplate, FONT } from './paper';
-import { paintStroke, PEN_DEFAULTS, strokeOutline, svgPath, strokePath } from './strokes';
+import { paintStroke, PEN_DEFAULTS, strokeOutline, svgPath, strokePath, createPressureFilter } from './strokes';
 import { connectorEnds, objBox, pointInPoly, shapePoints } from './geometry';
 import { loadImage } from './render';
 import { mathImage } from './math';
+import { accentColors } from '@/lib/theme';
 
 export type Tool = 'select' | 'lasso' | 'hand' | 'pen' | 'eraser' | 'text' | 'shape' | 'connector' | 'sticky' | 'table' | 'math' | 'node';
 export interface ToolState {
@@ -94,6 +95,7 @@ function MathNode({ latex, fontSize, color, w, h }: { latex: string; fontSize: n
 }
 
 export function InkCanvas(p: Props) {
+  const ACC = useMemo(() => accentColors(), []);   // selection / handle colours follow the user's accent
   const { mode = 'page', width, height, objects, tools, selected, readOnly } = p;
   const board = mode === 'board';
   const view: View = board ? p.view || { x: 0, y: 0, scale: 1 } : { x: 0, y: 0, scale: p.zoom || 1 };
@@ -193,7 +195,6 @@ export function InkCanvas(p: Props) {
   }, [board, p.zoom, p.onZoom]);
 
   const pos = () => layer.current!.getRelativePointerPosition()!;
-  const evPressure = (e: PointerEvent) => (e.pointerType === 'pen' ? clamp(e.pressure || 0.5, 0.05, 1) : -1);
 
   const cancelDrawing = () => {
     drawing.current = null; live.current?.visible(false); live.current?.getLayer()?.batchDraw();
@@ -243,7 +244,8 @@ export function InkCanvas(p: Props) {
     const t = ev.pointerType === 'pen' && !readOnly && ((ev.buttons & 32) || (ev.buttons & 2)) && ['pen', 'highlighter'].includes(tools.tool) ? 'eraser' : tools.tool;
     if (t === 'pen') {
       const pen = tools.pen;
-      drawing.current = { kind: 'pen', pen, points: [pt.x, pt.y, evPressure(ev)], pointerId: ev.pointerId, rec: p.recClock?.() || undefined };
+      const pressure = createPressureFilter();   // smooths raw stylus pressure for this stroke
+      drawing.current = { kind: 'pen', pen, points: [pt.x, pt.y, pressure(ev)], pressure, pointerId: ev.pointerId, rec: p.recClock?.() || undefined };
       const l = live.current!;
       l.setAttr('nvStroke', { id: 'live', type: 'stroke', pen, x: 0, y: 0, points: drawing.current.points, color: tools.colors[pen], size: tools.sizes[pen], opacity: pen === 'highlighter' ? PEN_DEFAULTS.highlighter.opacity : tools.opacity * PEN_DEFAULTS[pen].opacity });
       l.visible(true); l.getLayer()?.batchDraw();
@@ -337,7 +339,7 @@ export function InkCanvas(p: Props) {
         const lx = pts[pts.length - 3], ly = pts[pts.length - 2];
         if ((lx - q.x) ** 2 + (ly - q.y) ** 2 < 0.8) continue;
         if (d.pen === 'highlighter' && ev.shiftKey) { pts.length = 3; pts.push(q.x, pts[1], -1); }
-        else pts.push(q.x, q.y, evPressure(ce));
+        else pts.push(q.x, q.y, d.pressure(ce));
       }
       live.current!.getLayer()?.batchDraw();
     } else if (d.kind === 'eraser') eraseAt(pt.x, pt.y);
@@ -480,7 +482,7 @@ export function InkCanvas(p: Props) {
         );
       case 'shape': {
         const pts = shapePoints(o.shape, o.w, o.h);
-        const st = { stroke: highlightConn ? '#4B3F9E' : o.stroke, strokeWidth: o.size, fill: o.fill || undefined, dash: o.dash ? [o.size * 3, o.size * 2.5] : undefined, hitStrokeWidth: 14 };
+        const st = { stroke: highlightConn ? ACC.ink : o.stroke, strokeWidth: o.size, fill: o.fill || undefined, dash: o.dash ? [o.size * 3, o.size * 2.5] : undefined, hitStrokeWidth: 14 };
         return (
           <Group {...common}>
             {o.shape === 'line' ? <Line points={[0, 0, o.w, o.h]} {...st} lineCap="round" />
@@ -497,14 +499,14 @@ export function InkCanvas(p: Props) {
       case 'sticky':
         return (
           <Group {...common}>
-            <Rect width={o.w} height={o.h} fill={o.color} cornerRadius={6} shadowColor="#2F2B45" shadowOpacity={0.14} shadowBlur={14} shadowOffsetY={4} stroke={highlightConn ? '#4B3F9E' : undefined} strokeWidth={2} />
+            <Rect width={o.w} height={o.h} fill={o.color} cornerRadius={6} shadowColor="#2F2B45" shadowOpacity={0.14} shadowBlur={14} shadowOffsetY={4} stroke={highlightConn ? ACC.ink : undefined} strokeWidth={2} />
             {editing?.id !== o.id && <Text text={o.text || 'Double-tap to write…'} width={o.w - 28} x={14} y={14} fontSize={15} lineHeight={1.4} fontFamily={FONT} fill={o.text ? '#2F2B45' : '#2F2B4566'} wrap="word" />}
           </Group>
         );
       case 'node':
         return (
           <Group {...common}>
-            <Rect width={o.w} height={o.h} fill={o.color} cornerRadius={Math.min(22, o.h / 2)} stroke={highlightConn || sel ? '#6D60C2' : '#2F2B451f'} strokeWidth={highlightConn || sel ? 2 : 1} shadowColor="#2F2B45" shadowOpacity={0.06} shadowBlur={8} shadowOffsetY={2} />
+            <Rect width={o.w} height={o.h} fill={o.color} cornerRadius={Math.min(22, o.h / 2)} stroke={highlightConn || sel ? ACC.main : '#2F2B451f'} strokeWidth={highlightConn || sel ? 2 : 1} shadowColor="#2F2B45" shadowOpacity={0.06} shadowBlur={8} shadowOffsetY={2} />
             {editing?.id !== o.id && <Text text={o.text || 'Idea'} width={o.w} height={o.h} align="center" verticalAlign="middle" padding={10} fontSize={15} fontStyle="600" fontFamily={FONT} fill={o.text ? '#2F2B45' : '#2F2B4566'} wrap="word" />}
           </Group>
         );
@@ -523,7 +525,7 @@ export function InkCanvas(p: Props) {
         const xs: number[] = []; o.colWidths.reduce((acc, c) => { xs.push(acc); return acc + c; }, 0);
         return (
           <Group {...common}>
-            <Rect width={W} height={H} fill="#fff" stroke={highlightConn ? '#4B3F9E' : '#D5CEE4'} strokeWidth={1} />
+            <Rect width={W} height={H} fill="#fff" stroke={highlightConn ? ACC.ink : '#D5CEE4'} strokeWidth={1} />
             {o.header && <Rect width={W} height={o.rowHeight} fill={o.color} />}
             {xs.slice(1).map((x, i) => <Line key={'c' + i} points={[x, 0, x, H]} stroke="#D5CEE4" strokeWidth={1} listening={false} />)}
             {o.cells.slice(1).map((_, r) => <Line key={'r' + r} points={[0, (r + 1) * o.rowHeight, W, (r + 1) * o.rowHeight]} stroke="#D5CEE4" strokeWidth={1} listening={false} />)}
@@ -541,10 +543,10 @@ export function InkCanvas(p: Props) {
         const e = connectorEnds(o, byId, livePos);
         if (!e) return null;
         const pts = o.curved ? [e.x1, e.y1, (e.x1 + e.x2) / 2, e.y1, (e.x1 + e.x2) / 2, e.y2, e.x2, e.y2] : [e.x1, e.y1, e.x2, e.y2];
-        const cprops = { points: pts, stroke: sel ? '#4B3F9E' : o.stroke, strokeWidth: o.size, hitStrokeWidth: 16, lineCap: 'round' as const, bezier: !!o.curved };
+        const cprops = { points: pts, stroke: sel ? ACC.ink : o.stroke, strokeWidth: o.size, hitStrokeWidth: 16, lineCap: 'round' as const, bezier: !!o.curved };
         return (
           <Group key={o.id} id={o.id} name="conn" listening={!readOnly} onPointerDown={(ev: any) => { if (SELECTABLE.includes(tools.tool)) { ev.cancelBubble = true; p.onSelect([o.id]); } }}>
-            {o.arrow ? <Arrow {...cprops} fill={sel ? '#4B3F9E' : o.stroke} pointerLength={8 + o.size * 2} pointerWidth={8 + o.size * 2} /> : <Line {...cprops} />}
+            {o.arrow ? <Arrow {...cprops} fill={sel ? ACC.ink : o.stroke} pointerLength={8 + o.size * 2} pointerWidth={8 + o.size * 2} /> : <Line {...cprops} />}
           </Group>
         );
       }
@@ -589,9 +591,9 @@ export function InkCanvas(p: Props) {
             c.save(); c.globalAlpha = s.opacity ?? 1; if (s.pen === 'highlighter') c.globalCompositeOperation = 'multiply';
             c.fillStyle = s.color; c.fill(new Path2D(svgPath(strokeOutline(s.points, s.pen, s.size)))); c.restore();
           }} />
-          {band && band.length === 4 && <Rect listening={false} x={Math.min(band[0], band[2])} y={Math.min(band[1], band[3])} width={Math.abs(band[2] - band[0])} height={Math.abs(band[3] - band[1])} fill="#7C6FD11f" stroke="#6D60C2" dash={[6, 4]} strokeWidth={1 / view.scale} />}
-          {band && band.length > 4 && <Line listening={false} points={band} closed fill="#7C6FD114" stroke="#6D60C2" dash={[6, 4]} strokeWidth={1.5 / view.scale} />}
-          <Transformer ref={tr} rotateEnabled shouldOverdrawWholeArea anchorSize={10} anchorCornerRadius={5} borderStroke="#6D60C2" anchorStroke="#6D60C2" anchorFill="#fff" borderDash={[4, 4]}
+          {band && band.length === 4 && <Rect listening={false} x={Math.min(band[0], band[2])} y={Math.min(band[1], band[3])} width={Math.abs(band[2] - band[0])} height={Math.abs(band[3] - band[1])} fill={ACC.main + '1f'} stroke={ACC.main} dash={[6, 4]} strokeWidth={1 / view.scale} />}
+          {band && band.length > 4 && <Line listening={false} points={band} closed fill={ACC.main + '14'} stroke={ACC.main} dash={[6, 4]} strokeWidth={1.5 / view.scale} />}
+          <Transformer ref={tr} rotateEnabled shouldOverdrawWholeArea anchorSize={10} anchorCornerRadius={5} borderStroke={ACC.main} anchorStroke={ACC.main} anchorFill="#fff" borderDash={[4, 4]}
             boundBoxFunc={(o, n) => (Math.abs(n.width) < 8 || Math.abs(n.height) < 8 ? o : n)} onDragEnd={() => scheduleCommit()} onTransformEnd={() => scheduleCommit()} />
         </Layer>
       </Stage>
@@ -629,7 +631,7 @@ function EditOverlay({ o, cell, toScreen, scale, onDone }: { o: any; cell: { r?:
         if (e.key === 'Escape') (e.target as HTMLTextAreaElement).blur();
         if ((o.type === 'table' || o.type === 'node') && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); }
       }}
-      className="absolute z-10 resize-none rounded bg-white/90 outline-none ring-2 ring-[#7C6FD1]"
+      className="absolute z-10 resize-none rounded bg-white/90 outline-none ring-2 ring-primary"
       style={{ left: s.x, top: s.y, width: w * sx, height: h * sy, fontSize: fs * sy, lineHeight: 1.38, fontFamily: FONT, color: o.color && o.type === 'text' ? o.color : '#2F2B45',
         padding: pad * sy, textAlign: align, fontWeight: weight, fontStyle: o.italic ? 'italic' : 'normal', transform: o.rotation ? `rotate(${o.rotation}deg)` : undefined, transformOrigin: 'top left' }} />
   );

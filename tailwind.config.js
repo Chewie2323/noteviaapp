@@ -17,8 +17,9 @@ export default {
         card: { DEFAULT: 'hsl(var(--card))', foreground: 'hsl(var(--card-foreground))' },
         popover: { DEFAULT: 'hsl(var(--popover))', foreground: 'hsl(var(--popover-foreground))' },
         // Notevia brand palette
-        lavender: { DEFAULT: '#7C6FD1', deep: '#6D60C2', ink: '#4B3F9E' },
-        lilac: '#E4DDFB', sage: '#D5ECE3', dusty: '#F9D9E6', powder: '#D6E7F8', peach: '#FDE3D6', butter: '#FBF0C7', ivory: '#F8F6FC',
+        // lavender / lilac follow the user's accent colour (see lib/theme.ts); defaults are set in styles/index.css
+        lavender: { DEFAULT: 'rgb(var(--nv-lav) / <alpha-value>)', deep: 'rgb(var(--nv-lav-deep) / <alpha-value>)', ink: 'rgb(var(--nv-lav-ink) / <alpha-value>)' },
+        lilac: 'rgb(var(--nv-lilac) / <alpha-value>)', sage: '#D5ECE3', dusty: '#F9D9E6', powder: '#D6E7F8', peach: '#FDE3D6', butter: '#FBF0C7', ivory: '#F8F6FC',
         charcoal: '#2F2B45', slate2: '#7B7692',
       },
       fontFamily: { sans: ['ui-rounded', '"SF Pro Rounded"', '"Segoe UI"', 'system-ui', '-apple-system', 'Roboto', 'sans-serif'] },

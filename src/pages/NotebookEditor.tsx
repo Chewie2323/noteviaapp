@@ -423,7 +423,7 @@ function PageSetup({ open, onOpenChange, page, onApply, onUpload, busy }: { open
           <div className="grid gap-4 sm:grid-cols-3">
             <div><Label>Paper size</Label><NativeSelect value={size} onChange={(e) => setSize(e.target.value as PaperSize)}><option>A4</option><option>A5</option><option>Letter</option></NativeSelect></div>
             <div><Label>Orientation</Label><NativeSelect value={o} onChange={(e) => setO(e.target.value as Orientation)}><option value="portrait">Portrait</option><option value="landscape">Landscape</option></NativeSelect></div>
-            <label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#6D60C2]" checked={all} onChange={(e) => setAll(e.target.checked)} /> Apply to all pages</label>
+            <label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-primary" checked={all} onChange={(e) => setAll(e.target.checked)} /> Apply to all pages</label>
           </div>
         </DialogBody>
         <DialogFooter><Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button><Button onClick={() => { onApply({ template: t, paper_size: size, orientation: o }, all); onOpenChange(false); }}>Apply</Button></DialogFooter>
