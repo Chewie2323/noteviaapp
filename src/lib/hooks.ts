@@ -23,7 +23,11 @@ export function useRow<T>(table: TableName, id?: string | null) {
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => {
     if (!id) { setRow(null); setLoading(false); return; }
-    try { setRow(await db.get<T>(table, id)); } catch (e) { console.error(e); setRow(null); }
+    try {
+      const r = await db.get<T>(table, id);
+      // our own autosave echoes back through Realtime; ignore it when nothing but the timestamp changed so the editor does not re-render mid-stroke
+      setRow((prev) => { if (prev && r) { const { updated_at: _a, ...x } = prev as any; const { updated_at: _b, ...y } = r as any; if (JSON.stringify(x) === JSON.stringify(y)) return prev; } return r; });
+    } catch (e) { console.error(e); setRow(null); }
     setLoading(false);
   }, [table, id]);
   useEffect(() => { load(); return subscribe(table, load); }, [load, table]);

@@ -321,11 +321,11 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
 
         <div className="flex min-w-0 flex-1 flex-col">
           {editable && !embedded && <div className="fixed bottom-4 left-4 z-30 rounded-2xl bg-card/90 p-1.5 shadow-lift backdrop-blur"><AudioRecorder autoStart={autoRec} label="Record lesson" onStart={(t0) => { recRef.current = { clip: nanoid(8), t0 }; setRecording(true); }} onDone={(b, n) => onAudioRef.current(b, n)} /></div>}
-          <div ref={scrollRef} data-scroll className="flex-1 overflow-auto rounded-2xl">
+          <div ref={scrollRef} data-scroll className="flex-1 overflow-auto rounded-2xl [-webkit-overflow-scrolling:touch] [overscroll-behavior:contain]" style={{ WebkitTouchCallout: 'none' } as React.CSSProperties}>
             <div className="flex min-w-fit justify-center p-4">
               {page && (
                 <div className="overflow-hidden rounded-md shadow-lift ring-1 ring-black/5">
-                  <InkCanvas key={page.id} width={dims.w} height={dims.h} zoom={zoom} objects={page.objects} onCommit={(o) => setObjects(o)}
+                  <InkCanvas key={page.id} width={dims.w} height={dims.h} zoom={zoom} onZoom={setZoom} objects={page.objects} onCommit={(o) => setObjects(o)}
                     selected={selected} onSelect={setSelected} tools={tools} readOnly={!editable} pencilOnly={!!app.user.settings?.pencil_only} onUndo={undo} onRedo={redo} tapUndo={app.user.settings?.tap_undo !== false}
                     background={{ kind: 'template', template: page.template, customImage: bgImg }} onHint={setHint}
                     onRequestMath={(at, existing) => setMathAt({ at, obj: existing as MathObj })}

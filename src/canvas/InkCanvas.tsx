@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Stage, Layer, Shape, Rect, Ellipse, Line, Arrow, Group, Text, Label, Tag, Image as KImage, Transformer } from 'react-konva';
 import type Konva from 'konva';
 import { nanoid } from 'nanoid';
@@ -94,6 +94,22 @@ function MathNode({ latex, fontSize, color, w, h }: { latex: string; fontSize: n
   return img ? <KImage image={img} width={w} height={h} /> : <Text text={latex} fontSize={fontSize * 0.7} fontFamily="monospace" fill={color} />;
 }
 
+/**
+ * One saved stroke. Memoised so that saving a new stroke (or the "Saved" badge flipping) does not make React touch every other
+ * stroke on the page: previously each of those re-rendered hundreds of Konva nodes and caused the hitch you felt while writing.
+ */
+const StrokeNode = memo(function StrokeNode({ o, h, listening, draggable, opacity }: { o: StrokeObj; h: React.MutableRefObject<any>; listening: boolean; draggable: boolean; opacity: number }) {
+  return (
+    <Group id={o.id} name="obj" x={o.x} y={o.y} rotation={o.rotation || 0} scaleX={o.scaleX ?? 1} scaleY={o.scaleY ?? 1} opacity={opacity}
+      draggable={draggable} listening={listening}
+      onPointerDown={(e: any) => h.current.objDown(o, e)} onDragStart={() => h.current.dragStart(o)} onDragMove={(e: any) => h.current.dragMove(o, e)}
+      onDragEnd={() => h.current.dragEnd(o)} onTransformEnd={() => h.current.transformEnd()} onDblClick={() => h.current.dbl(o)} onDblTap={() => h.current.dbl(o)}>
+      <Shape perfectDrawEnabled={false} sceneFunc={(ctx) => paintStroke((ctx as any)._context, o)}
+        hitFunc={(ctx, shape) => { const c = (ctx as any)._context as CanvasRenderingContext2D; c.fillStyle = (shape as any).colorKey; c.strokeStyle = (shape as any).colorKey; c.lineWidth = 10; const pth = strokePath(o); c.fill(pth); c.stroke(pth); }} />
+    </Group>
+  );
+}, (a, b) => a.o === b.o && a.listening === b.listening && a.draggable === b.draggable && a.opacity === b.opacity);
+
 export function InkCanvas(p: Props) {
   const ACC = useMemo(() => accentColors(), []);   // selection / handle colours follow the user's accent
   const { mode = 'page', width, height, objects, tools, selected, readOnly } = p;
@@ -108,8 +124,13 @@ export function InkCanvas(p: Props) {
   const wrap = useRef<HTMLDivElement>(null);
   const drawing = useRef<any>(null);
   const pointers = useRef(new Map<number, { x: number; y: number; type: string }>());
-  const gesture = useRef<{ dist: number; cx: number; cy: number; view: View; sl?: number; st?: number; rl?: number; rt?: number } | null>(null);
+  const gesture = useRef<{ dist: number; cx: number; cy: number; view: View; sl?: number; st?: number; rl?: number; rt?: number; engaged?: boolean } | null>(null);
   const penActive = useRef(false);
+  // once a stylus has been used on this device, a single finger scrolls instead of drawing (like Notability / GoodNotes)
+  const penSeen = useRef((() => { try { return localStorage.getItem('nv-pen-seen') === '1'; } catch { return false; } })());
+  const inertia = useRef(0);
+  const undoRef = useRef(p.onUndo), redoRef = useRef(p.onRedo);
+  undoRef.current = p.onUndo; redoRef.current = p.onRedo;
   // multi-finger tap tracking (two fingers = undo, three = redo)
   const tapG = useRef<{ t0: number; max: number; moved: boolean; start: Map<number, { x: number; y: number }> } | null>(null);
   const pendingStart = useRef<any>(null);
@@ -206,8 +227,12 @@ export function InkCanvas(p: Props) {
   const onDown = (e: Konva.KonvaEventObject<PointerEvent>) => {
     const ev = e.evt;
     if (p.seekMode) return;
+    cancelAnimationFrame(inertia.current);
     pointers.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, type: ev.pointerType });
-    if (ev.pointerType === 'pen') penActive.current = true;
+    if (ev.pointerType === 'pen') {
+      penActive.current = true;
+      if (!penSeen.current) { penSeen.current = true; try { localStorage.setItem('nv-pen-seen', '1'); } catch { /* storage blocked */ } }
+    }
     if (ev.pointerType === 'touch' && tapOn && !penActive.current) {
       const touches = Array.from(pointers.current.values()).filter((v) => v.type === 'touch').length;
       const now = performance.now();
@@ -228,9 +253,12 @@ export function InkCanvas(p: Props) {
     }
     if (readOnly) return;
     // palm rejection: ignore touch while a stylus is in use, or always when "stylus only" is on
-    const touchBlocked = ev.pointerType === 'touch' && (p.pencilOnly || penActive.current);
+    // a touch while the stylus is down or has only just lifted is a resting palm: ignore it completely (no stray marks, no jolting scroll)
+    if (ev.pointerType === 'touch' && (penActive.current || Array.from(pointers.current.values()).some((v) => v.type === 'pen'))) return;
+    const inkTool = tools.tool === 'pen' || tools.tool === 'eraser';
+    const touchBlocked = ev.pointerType === 'touch' && (p.pencilOnly || (penSeen.current && inkTool));
     if (tools.tool === 'hand' || touchBlocked) {
-      drawing.current = { kind: 'pan', last: { x: ev.clientX, y: ev.clientY } };
+      drawing.current = { kind: 'pan', last: { x: ev.clientX, y: ev.clientY }, vx: 0, vy: 0, t: performance.now() };
       return;
     }
     // tools that create an object the instant a finger lands wait briefly, so a two-finger tap never leaves one behind
@@ -350,6 +378,50 @@ export function InkCanvas(p: Props) {
     return () => el.removeEventListener('pointermove', h, true);
   }, []);
 
+
+  // Two-finger tap = undo, three-finger tap = redo. Detected straight from DOM pointer events (not through Konva) so it
+  // fires reliably, ignores palms that rest while the Pencil is near, and never triggers when the fingers are scrolling.
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el || !tapOn) return;
+    let g: { t0: number; max: number; moved: boolean; bad: boolean; start: Map<number, { x: number; y: number }> } | null = null;
+    const active = new Set<number>();
+    let lastPen = -1e9;
+    const down = (e: PointerEvent) => {
+      const now = performance.now();
+      if (e.pointerType === 'pen') { lastPen = now; return; }
+      if (e.pointerType !== 'touch') return;
+      if (now - lastPen < 400) { active.add(e.pointerId); g = { t0: now, max: 0, moved: true, bad: true, start: new Map() }; return; }
+      active.add(e.pointerId);
+      if (active.size === 1 || !g) g = { t0: now, max: 1, moved: false, bad: false, start: new Map() };
+      else if (now - g.t0 > 450) g.bad = true;   // a late extra finger is a hold / pinch, not a tap
+      g.max = Math.max(g.max, active.size);
+      g.start.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    };
+    const move = (e: PointerEvent) => {
+      if (e.pointerType === 'pen') { lastPen = performance.now(); return; }
+      const s0 = g?.start.get(e.pointerId);
+      if (g && s0 && Math.hypot(e.clientX - s0.x, e.clientY - s0.y) > 14) g.moved = true;
+    };
+    const up = (e: PointerEvent) => {
+      if (e.pointerType === 'pen') { lastPen = performance.now(); return; }
+      if (e.pointerType !== 'touch') return;
+      active.delete(e.pointerId);
+      if (active.size) return;
+      const t = g; g = null;
+      if (e.type === 'pointercancel' || !t || t.bad || t.moved || t.max < 2 || performance.now() - t.t0 > 600) return;
+      if (t.max === 2) undoRef.current?.(); else if (t.max === 3) redoRef.current?.();
+    };
+    el.addEventListener('pointerdown', down, true);
+    el.addEventListener('pointermove', move, true);
+    el.addEventListener('pointerup', up, true);
+    el.addEventListener('pointercancel', up, true);
+    return () => {
+      el.removeEventListener('pointerdown', down, true); el.removeEventListener('pointermove', move, true);
+      el.removeEventListener('pointerup', up, true); el.removeEventListener('pointercancel', up, true);
+    };
+  }, [tapOn]);
+
   const onMove = (e: Konva.KonvaEventObject<PointerEvent>) => {
     const ev = e.evt;
     if (pointers.current.has(ev.pointerId)) pointers.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, type: ev.pointerType });
@@ -358,6 +430,7 @@ export function InkCanvas(p: Props) {
     if (gesture.current && pointers.current.size === 2) {
       const [a, b] = Array.from(pointers.current.values());
       const g = gesture.current, d = Math.hypot(a.x - b.x, a.y - b.y), cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2;
+      if (!g.engaged) { if (Math.abs(d - g.dist) > 10 || Math.hypot(cx - g.cx, cy - g.cy) > 10) g.engaged = true; else return; }   // a tap's jitter must not nudge the zoom
       const r = wrap.current!.getBoundingClientRect();
       if (!board) {   // page: pinch zooms, two-finger drag scrolls, anchored on the pinch centre
         const z0 = g.view.scale, nz = clamp(+(z0 * (d / (g.dist || 1))).toFixed(3), 0.3, 4);
@@ -376,7 +449,8 @@ export function InkCanvas(p: Props) {
     const d = drawing.current;
     if (!d) return;
     if (d.kind === 'pan') {
-      const dx = ev.clientX - d.last.x, dy = ev.clientY - d.last.y;
+      const dx = ev.clientX - d.last.x, dy = ev.clientY - d.last.y, tn = performance.now(), dt = Math.max(1, tn - d.t);
+      d.vx = (dx / dt) * 0.6 + d.vx * 0.4; d.vy = (dy / dt) * 0.6 + d.vy * 0.4; d.t = tn;
       d.last = { x: ev.clientX, y: ev.clientY };
       if (board) p.onView?.({ ...view, x: view.x + dx, y: view.y + dy });
       else (wrap.current?.closest('[data-scroll]') as HTMLElement | null)?.scrollBy(-dx, -dy);
@@ -399,13 +473,12 @@ export function InkCanvas(p: Props) {
   };
 
   const onUp = (e?: Konva.KonvaEventObject<PointerEvent>) => {
-    if (e) { pointers.current.delete(e.evt.pointerId); if (e.evt.pointerType === 'pen') setTimeout(() => { penActive.current = false; }, 600); }
+    if (e) { pointers.current.delete(e.evt.pointerId); if (e.evt.pointerType === 'pen') setTimeout(() => { penActive.current = false; }, 300); }
     const tg = tapG.current;
     if (e && tg && e.evt.pointerType === 'touch') {
       if (e.evt.type === 'pointercancel') tapG.current = null;
       else if (e.evt.type === 'pointerup' && tg.max >= 2 && !Array.from(pointers.current.values()).some((v) => v.type === 'touch')) {
-        tapG.current = null; gesture.current = null;
-        if (!tg.moved && performance.now() - tg.t0 < 400) { if (tg.max === 2) p.onUndo?.(); else if (tg.max === 3) p.onRedo?.(); }
+        tapG.current = null; gesture.current = null;   // the undo / redo itself is fired by the native tap detector above
         return;
       }
     }
@@ -413,6 +486,20 @@ export function InkCanvas(p: Props) {
     const d = drawing.current;
     drawing.current = null;
     if (!d) return;
+    if (d.kind === 'pan') {   // let a flick keep scrolling, then ease out
+      const sc = !board ? (wrap.current?.closest('[data-scroll]') as HTMLElement | null) : null;
+      let vx = d.vx, vy = d.vy, last = performance.now();
+      if (sc && performance.now() - d.t < 80 && Math.hypot(vx, vy) > 0.15) {
+        const step = (t: number) => {
+          const dt = Math.min(48, t - last); last = t;
+          sc.scrollBy(-vx * dt, -vy * dt);
+          const f = Math.pow(0.94, dt / 16); vx *= f; vy *= f;
+          if (Math.hypot(vx, vy) > 0.03) inertia.current = requestAnimationFrame(step);
+        };
+        inertia.current = requestAnimationFrame(step);
+      }
+      return;
+    }
     if (d.kind === 'pen') {
       // Keep the preview up until the saved stroke has been painted, so there is no one-frame blink when the pen lifts.
       const node = d.node, onTop = node === liveInk.current && tools.opacity >= 1;
@@ -502,6 +589,13 @@ export function InkCanvas(p: Props) {
     }
   };
 
+  const H = useRef<any>({});
+  H.current = {
+    objDown: onObjDown, dbl: onObjDbl, transformEnd: () => scheduleCommit(), dragEnd: (o: CanvasObject) => scheduleCommit(o.id),
+    dragStart: (o: CanvasObject) => { if (!selected.includes(o.id)) p.onSelect([o.id]); },
+    dragMove: (o: CanvasObject, e: any) => { const n = e.target; setLivePos((lp) => ({ ...lp, [o.id]: { x: n.x(), y: n.y() } })); },
+  };
+
   const renderObj = (o: CanvasObject, isGhost = false) => {
     const sel = selected.includes(o.id);
     const common: any = {
@@ -522,12 +616,7 @@ export function InkCanvas(p: Props) {
     const highlightConn = connFrom === o.id;
     switch (o.type) {
       case 'stroke':
-        return (
-          <Group {...common}>
-            <Shape sceneFunc={(ctx) => paintStroke((ctx as any)._context, o)}
-              hitFunc={(ctx, shape) => { const c = (ctx as any)._context as CanvasRenderingContext2D; c.fillStyle = (shape as any).colorKey; c.strokeStyle = (shape as any).colorKey; c.lineWidth = 10; const pth = strokePath(o); c.fill(pth); c.stroke(pth); }} />
-          </Group>
-        );
+        return <StrokeNode key={o.id} o={o as StrokeObj} h={H} listening={common.listening} draggable={common.draggable} opacity={common.opacity} />;
       case 'shape': {
         const pts = shapePoints(o.shape, o.w, o.h);
         const st = { stroke: highlightConn ? ACC.ink : o.stroke, strokeWidth: o.size, fill: o.fill || undefined, dash: o.dash ? [o.size * 3, o.size * 2.5] : undefined, hitStrokeWidth: 14 };
@@ -623,7 +712,7 @@ export function InkCanvas(p: Props) {
   const stageW = board ? width : width * view.scale, stageH = board ? height : height * view.scale;
 
   return (
-    <div ref={wrap} className="relative select-none" style={{ width: stageW, height: stageH, touchAction, cursor }}>
+    <div ref={wrap} className="relative select-none" onContextMenu={(e) => e.preventDefault()} style={{ width: stageW, height: stageH, touchAction, cursor, WebkitUserSelect: 'none', WebkitTouchCallout: 'none' } as React.CSSProperties}>
       <Stage ref={stage as any} width={stageW} height={stageH} x={view.x} y={view.y} scaleX={view.scale} scaleY={view.scale}
         onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}
         onPointerLeave={(e) => { if (drawing.current?.kind !== 'pan') onUp(e); }}>
