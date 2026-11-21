@@ -299,6 +299,57 @@ export function InkCanvas(p: Props) {
     if (changed) setErasing(new Set(erased.current));
   };
 
+  /**
+   * Live pen movement. Runs straight from a native listener (see the effect below), NOT through Konva: Konva hit-tests
+   * the pointer against every object on every move, which is what made the ink trail behind the pencil.
+   */
+  const penMove = (ev: PointerEvent) => {
+    const d = drawing.current;
+    if (!d || d.kind !== 'pen' || ev.pointerId !== d.pointerId) return;
+    const box = wrap.current!.getBoundingClientRect();
+    const inv = layer.current!.getAbsoluteTransform().copy().invert();
+    const toLocal = (cx: number, cy: number) => inv.point({ x: cx - box.left, y: cy - box.top });
+    const pts: number[] = d.points;
+    const coalesced: PointerEvent[] = ev.getCoalescedEvents ? ev.getCoalescedEvents() : [];
+    for (const ce of coalesced.length ? coalesced : [ev]) {
+      const q = toLocal(ce.clientX, ce.clientY);
+      const lx = pts[pts.length - 3], ly = pts[pts.length - 2];
+      if ((lx - q.x) ** 2 + (ly - q.y) ** 2 < 0.2) continue;   // ~0.45px: keeps small loops and tone marks intact
+      if (d.pen === 'highlighter' && ev.shiftKey) { pts.length = 3; pts.push(q.x, pts[1], -1); }
+      else pts.push(q.x, q.y, d.pressure(ce));
+    }
+    // Preview only: let the browser's own prediction lead the pen tip (iOS Safari 18.2+). Never stored.
+    const live0 = d.node.getAttr('nvStroke');
+    if (live0) {
+      const ahead: number[] = [];
+      if (d.pen !== 'highlighter' && ev.pointerType === 'pen' && ev.getPredictedEvents) {
+        const last = pts.length - 3;
+        let px = pts[last], py = pts[last + 1];
+        for (const pe of ev.getPredictedEvents().slice(0, 4)) {
+          const q = toLocal(pe.clientX, pe.clientY);
+          if (Math.hypot(q.x - px, q.y - py) > 24) break;   // ignore a jump the pen could not plausibly make in one frame
+          ahead.push(q.x, q.y, pts[last + 2]); px = q.x; py = q.y;
+        }
+      }
+      d.node.setAttr('nvStroke', { ...live0, points: ahead.length ? pts.concat(ahead) : pts });
+    }
+    d.node.getLayer()?.batchDraw();
+  };
+  const penMoveRef = useRef(penMove);
+  penMoveRef.current = penMove;
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const h = (ev: PointerEvent) => {
+      const d = drawing.current;
+      if (!d || d.kind !== 'pen' || ev.pointerId !== d.pointerId || gesture.current) return;
+      ev.stopPropagation();   // capture phase on the wrapper: Konva never sees this move, so it skips its hit test
+      penMoveRef.current(ev);
+    };
+    el.addEventListener('pointermove', h, true);
+    return () => el.removeEventListener('pointermove', h, true);
+  }, []);
+
   const onMove = (e: Konva.KonvaEventObject<PointerEvent>) => {
     const ev = e.evt;
     if (pointers.current.has(ev.pointerId)) pointers.current.set(ev.pointerId, { x: ev.clientX, y: ev.clientY, type: ev.pointerType });
@@ -331,36 +382,9 @@ export function InkCanvas(p: Props) {
       else (wrap.current?.closest('[data-scroll]') as HTMLElement | null)?.scrollBy(-dx, -dy);
       return;
     }
+    if (d.kind === 'pen') { penMoveRef.current(ev); return; }   // normally handled by the fast path below, never reaches here
     const pt = pos();
-    if (d.kind === 'pen') {
-      if (ev.pointerId !== d.pointerId) return;
-      const pts: number[] = d.points;
-      const events = (ev as any).getCoalescedEvents ? (ev as any).getCoalescedEvents() : [ev];
-      const box = events.length > 1 ? wrap.current!.getBoundingClientRect() : null;
-      const inv = events.length > 1 ? layer.current!.getAbsoluteTransform().copy().invert() : null;
-      for (const ce of events.length ? events : [ev]) {
-        const q = inv && box ? inv.point({ x: ce.clientX - box.left, y: ce.clientY - box.top }) : pt;
-        const lx = pts[pts.length - 3], ly = pts[pts.length - 2];
-        if ((lx - q.x) ** 2 + (ly - q.y) ** 2 < 0.2) continue;   // ~0.45px: keeps small loops and tone marks intact
-        if (d.pen === 'highlighter' && ev.shiftKey) { pts.length = 3; pts.push(q.x, pts[1], -1); }
-        else pts.push(q.x, q.y, d.pressure(ce));
-      }
-      // Preview only: let the browser's own prediction lead the pen tip by a frame or so (iOS Safari 18.2+). Never stored.
-      const live0 = d.node.getAttr('nvStroke');
-      if (live0 && d.pen !== 'highlighter') {
-        const pred: any[] = (ev as any).getPredictedEvents ? (ev as any).getPredictedEvents() : [];
-        let ahead: number[] | null = null;
-        if (pred.length && ev.pointerType === 'pen') {
-          const b2 = box || wrap.current!.getBoundingClientRect(), iv = inv || layer.current!.getAbsoluteTransform().copy().invert();
-          const last = pts.length - 3;
-          const q = iv.point({ x: pred[0].clientX - b2.left, y: pred[0].clientY - b2.top });
-          // ignore a prediction that jumps further than the pen could plausibly travel in one frame
-          if (Math.hypot(q.x - pts[last], q.y - pts[last + 1]) < 24) ahead = [q.x, q.y, pts[last + 2]];
-        }
-        d.node.setAttr('nvStroke', { ...live0, points: ahead ? pts.concat(ahead) : pts });
-      }
-      d.node.getLayer()?.batchDraw();
-    } else if (d.kind === 'eraser') eraseAt(pt.x, pt.y);
+    if (d.kind === 'eraser') eraseAt(pt.x, pt.y);
     else if (d.kind === 'lasso') { d.points.push(pt.x, pt.y); setBand([...d.points]); }
     else if (d.kind === 'select') setBand([d.start.x, d.start.y, pt.x, pt.y]);
     else if (d.kind === 'shape' && ghost) {
@@ -491,7 +515,9 @@ export function InkCanvas(p: Props) {
       onDragEnd: () => scheduleCommit(o.id),
       onTransformEnd: () => scheduleCommit(),
       onDblClick: () => onObjDbl(o), onDblTap: () => onObjDbl(o),
-      listening: !readOnly && !isGhost,
+      // While writing/erasing nothing needs to be clickable. Not listening means Konva skips drawing every stroke into its
+      // hidden hit canvas (the biggest cost after each saved stroke) and has nothing to hit-test.
+      listening: !readOnly && !isGhost && tools.tool !== 'pen' && tools.tool !== 'eraser',
     };
     const highlightConn = connFrom === o.id;
     switch (o.type) {
