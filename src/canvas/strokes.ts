@@ -2,25 +2,25 @@ import { getStroke } from 'perfect-freehand';
 import type { PenKind, StrokeObj } from '@/lib/types';
 
 export const PEN_DEFAULTS: Record<PenKind, { size: number; color: string; opacity: number; label: string }> = {
-  ballpoint: { size: 3, color: '#2F2B45', opacity: 1, label: 'Ballpoint pen' },
-  fountain: { size: 5, color: '#2B3A67', opacity: 1, label: 'Fountain pen' },
-  pencil: { size: 2.4, color: '#5A5D6B', opacity: 0.78, label: 'Pencil' },
+  ballpoint: { size: 2, color: '#2F2B45', opacity: 1, label: 'Ballpoint pen' },
+  fountain: { size: 3.5, color: '#2B3A67', opacity: 1, label: 'Fountain pen' },
+  pencil: { size: 2, color: '#5A5D6B', opacity: 0.78, label: 'Pencil' },
   highlighter: { size: 18, color: '#FFE88A', opacity: 0.42, label: 'Highlighter' },
 };
 
 /**
- * Stroke shape options.
- * Pressure mode (Apple Pencil / S Pen): width follows pressure, but gently. The previous values (thinning 0.85–0.9
- * on raw, unfiltered pressure) swung each stroke between ~0.6px hairlines and ~4px blobs. With thinning ≈ 0.5 the
- * thinnest part of a stroke is ~half as wide as the thickest, which still reads as pressure but never as a glitch.
+ * Stroke shape options, tuned for HANDWRITING (small script such as Thai: tight loops, heads, tiny tone marks).
+ *  - The nominal size is the line you get at your normal writing pressure; pressure only modulates around it.
+ *  - Smoothing is deliberately light. Heavy "streamline" lags behind the pen tip and rounds off small loops.
+ *  - Tapers are capped to a fraction of the stroke length so dots and short tone marks don't shrink to nothing.
  */
-function options(pen: PenKind, size: number, hasPressure: boolean) {
-  const s = hasPressure ? size * 1.25 : size;
+function options(pen: PenKind, size: number, hasPressure: boolean, len: number) {
+  const cap = (t: number) => Math.max(0, Math.min(t, len * 0.3));
   switch (pen) {
-    case 'fountain': return { size: s, thinning: hasPressure ? 0.7 : 0.72, smoothing: 0.62, streamline: hasPressure ? 0.45 : 0.42, simulatePressure: !hasPressure, start: { taper: size * 2 }, end: { taper: size * 5 } };
-    case 'pencil': return { size: s, thinning: hasPressure ? 0.5 : 0.18, smoothing: 0.45, streamline: hasPressure ? 0.35 : 0.3, simulatePressure: !hasPressure };
+    case 'fountain': return { size, thinning: hasPressure ? 0.6 : 0.72, smoothing: 0.55, streamline: hasPressure ? 0.28 : 0.42, simulatePressure: !hasPressure, start: { taper: cap(size * 2) }, end: { taper: cap(size * 5) } };
+    case 'pencil': return { size, thinning: hasPressure ? 0.5 : 0.18, smoothing: 0.4, streamline: hasPressure ? 0.2 : 0.3, simulatePressure: !hasPressure };
     case 'highlighter': return { size, thinning: 0, smoothing: 0.5, streamline: 0.5, simulatePressure: false, start: { cap: false }, end: { cap: false } };
-    default: return { size: s, thinning: hasPressure ? 0.5 : 0.18, smoothing: 0.6, streamline: hasPressure ? 0.45 : 0.5, simulatePressure: !hasPressure };
+    default: return { size, thinning: hasPressure ? 0.5 : 0.18, smoothing: 0.5, streamline: hasPressure ? 0.2 : 0.5, simulatePressure: !hasPressure };
   }
 }
 
@@ -43,20 +43,52 @@ export function setPressureLevel(l: PressureLevel) { try { localStorage.setItem(
 
 const clamp01 = (n: number, lo = 0.05) => Math.min(1, Math.max(lo, n));
 
+// "Typical writing pressure" for this person/stylus. Pressure above it thickens the line, below it thins it, and at
+// exactly this pressure you get the nominal thickness. It adapts slowly to how hard the user actually writes, so the
+// thickness slider stays honest for light and heavy writers alike.
+const BASE_KEY = 'nv-pressure-base';
+const BASE_DEFAULT = 0.3, BASE_MIN = 0.12, BASE_MAX = 0.55;
+export function getPressureBase(): number {
+  try { const v = parseFloat(localStorage.getItem(BASE_KEY) || ''); if (v >= BASE_MIN && v <= BASE_MAX) return v; } catch { /* storage blocked */ }
+  return BASE_DEFAULT;
+}
+export function resetPressureBase() { try { localStorage.removeItem(BASE_KEY); } catch { /* storage blocked */ } }
+function learnPressureBase(mean: number) {
+  const b = getPressureBase();
+  const n = Math.min(BASE_MAX, Math.max(BASE_MIN, b + (mean - b) * 0.15));
+  try { localStorage.setItem(BASE_KEY, n.toFixed(3)); } catch { /* storage blocked */ }
+}
+
 /**
- * Per-stroke pressure filter, used while drawing. Raw stylus pressure is noisy (and some browsers report 0 or a fixed
- * 0.5), so each sample is low-pass filtered, then scaled by the user's sensitivity setting.
+ * Maps smoothed raw pressure to the stored value. Stored pressure 0.5 = nominal width; width ratio = 0.5 + stored,
+ * so the line is never thinner than 55% or thicker than 150% of the nominal size (no hairlines, no blobs).
+ */
+function pressureToStored(p: number, base: number, k: number): number {
+  const r = p < base ? 1 - 0.35 * k * (1 - p / base) : 1 + 0.5 * k * ((p - base) / (1 - base));
+  return clamp01(Math.min(1.5, Math.max(0.55, r)) - 0.5);
+}
+
+/**
+ * Per-stroke pressure filter, used while drawing. Raw stylus pressure is noisy, reads 0 when "not reported", and
+ * ramps up from ~0 as the tip lands, so each sample is low-pass filtered and the first few samples are held at the
+ * typical pressure (otherwise every stroke starts as a hairline).
  * Returns -1 for non-stylus input or when pressure is switched off, which keeps the simulated-taper look.
+ * Call `.learn()` when the stroke ends to let the typical pressure adapt.
  */
 export function createPressureFilter() {
   const k = PRESSURE_LEVELS[getPressureLevel()].factor;
-  let s: number | null = null;
-  return (e: { pointerType: string; pressure: number }): number => {
+  const base = getPressureBase();
+  let s: number | null = null, n = 0, sum = 0;
+  const f = (e: { pointerType: string; pressure: number }): number => {
     if (e.pointerType !== 'pen' || k === 0) return -1;
-    const raw = clamp01(e.pressure || 0.5);
-    s = s === null ? raw : s + (raw - s) * 0.3;
-    return clamp01(0.5 + (s - 0.5) * k);
+    let raw = e.pressure > 0 ? Math.min(1, e.pressure) : base;
+    if (n < 3) raw = Math.max(raw, base);
+    n++; sum += raw;
+    s = s === null ? raw : s + (raw - s) * 0.35;
+    return pressureToStored(s, base, k);
   };
+  f.learn = () => { if (n >= 8) learnPressureBase(sum / n); };
+  return f;
 }
 
 /** Symmetric weighted moving average — removes the remaining jitter from stored strokes (including older ones). */
@@ -83,12 +115,14 @@ export function strokeOutline(points: number[], pen: PenKind, size: number): num
     pts.push([points[i], points[i + 1], 0.5]);
   }
   const pr = hasPressure ? smoothPressure(raw) : raw;
-  for (let i = 0; i < pts.length; i++) pts[i][2] = hasPressure ? clamp01(Math.pow(pr[i], 0.85)) : 0.5;
+  for (let i = 0; i < pts.length; i++) pts[i][2] = hasPressure ? clamp01(pr[i]) : 0.5;
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
   if (pen === 'pencil') {
     // slight deterministic grain so pencil lines feel hand-drawn
     for (let i = 0; i < pts.length; i++) { const n = Math.sin(i * 12.9898) * 0.35; pts[i][0] += n; pts[i][1] -= n; }
   }
-  return getStroke(pts, { ...options(pen, size, hasPressure), last: true });
+  return getStroke(pts, { ...options(pen, size, hasPressure, len), last: true });
 }
 
 const cache = new Map<string, Path2D>();

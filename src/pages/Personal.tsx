@@ -201,7 +201,7 @@ export function SettingsPage() {
         </TabsContent>
         <TabsContent value="preferences">
           <div className="rounded-2xl border border-border bg-card px-6 py-2">
-            <Row icon={<PenTool />} title="Pen pressure sensitivity" desc="How strongly Apple Pencil pressure changes line thickness. Choose Off for an even line. Saved on this device.">
+            <Row icon={<PenTool />} title="Pen pressure sensitivity" desc="How much Apple Pencil pressure changes line thickness. Soft keeps handwriting even, Firm is more expressive, Off gives a constant line. Saved on this device.">
               <NativeSelect className="w-36" value={pressure} onChange={(e) => { const v = e.target.value as PressureLevel; setPressureLevel(v); setPressure(v); }} aria-label="Pen pressure sensitivity">{(Object.keys(PRESSURE_LEVELS) as PressureLevel[]).map((id) => <option key={id} value={id}>{PRESSURE_LEVELS[id].label}</option>)}</NativeSelect>
             </Row>
             <Row icon={<PenTool />} title="Two-finger tap to undo" desc="Tap the canvas with two fingers to undo, three to redo — like Notability"><Switch checked={settings.tap_undo !== false} onCheckedChange={(v) => setSetting({ tap_undo: v })} aria-label="Two-finger tap to undo" /></Row>

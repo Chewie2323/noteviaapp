@@ -20,7 +20,7 @@ export interface ToolState {
 export const DEFAULT_TOOLS: ToolState = {
   tool: 'pen', pen: 'ballpoint',
   colors: { ballpoint: PEN_DEFAULTS.ballpoint.color, fountain: PEN_DEFAULTS.fountain.color, pencil: PEN_DEFAULTS.pencil.color, highlighter: PEN_DEFAULTS.highlighter.color },
-  sizes: { ballpoint: 3, fountain: 5, pencil: 2.4, highlighter: 18 }, opacity: 1,
+  sizes: { ballpoint: 2, fountain: 3.5, pencil: 2, highlighter: 18 }, opacity: 1,
   shape: 'rect', shapeColor: '#6D60C2', shapeSize: 2, fill: null, dash: false,
   eraserSize: 14, fontSize: 20, textColor: '#2F2B45', stickyColor: '#FFF2B3', nodeColor: '#E4DDFB',
 };
@@ -101,7 +101,9 @@ export function InkCanvas(p: Props) {
   const view: View = board ? p.view || { x: 0, y: 0, scale: 1 } : { x: 0, y: 0, scale: p.zoom || 1 };
   const stage = useRef<Konva.Stage | null>(null);
   const layer = useRef<Konva.Layer>(null);
-  const live = useRef<Konva.Shape>(null);
+  const live = useRef<Konva.Shape>(null);        // highlighter preview (lives in the page layer so it can multiply over ink)
+  const liveInk = useRef<Konva.Shape>(null);     // pen preview, on its own layer so redrawing it never repaints the whole page
+  const hideLive = () => { for (const n of [live.current, liveInk.current]) if (n?.visible()) { n.visible(false); n.getLayer()?.batchDraw(); } };
   const tr = useRef<Konva.Transformer>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const drawing = useRef<any>(null);
@@ -197,7 +199,7 @@ export function InkCanvas(p: Props) {
   const pos = () => layer.current!.getRelativePointerPosition()!;
 
   const cancelDrawing = () => {
-    drawing.current = null; live.current?.visible(false); live.current?.getLayer()?.batchDraw();
+    drawing.current = null; hideLive();
     setBand(null); setGhost(null); setErasing(new Set()); erased.current = new Set(); lastErase.current = null;
   };
 
@@ -218,7 +220,7 @@ export function InkCanvas(p: Props) {
     } else tapG.current = null;
     // two-finger pan / pinch on boards
     if ((board || p.onZoom) && pointers.current.size === 2 && Array.from(pointers.current.values()).every((v) => v.type === 'touch' || board)) {
-      drawing.current = null; live.current?.visible(false); setBand(null); setGhost(null); setErasing(new Set()); erased.current = new Set();
+      drawing.current = null; hideLive(); setBand(null); setGhost(null); setErasing(new Set()); erased.current = new Set();
       const [a, b] = Array.from(pointers.current.values());
       const sc = wrap.current?.closest('[data-scroll]') as HTMLElement | null;
       gesture.current = { dist: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, view: { ...view }, sl: sc?.scrollLeft ?? 0, st: sc?.scrollTop ?? 0, rl: wrap.current?.getBoundingClientRect().left ?? 0, rt: wrap.current?.getBoundingClientRect().top ?? 0 };
@@ -245,8 +247,8 @@ export function InkCanvas(p: Props) {
     if (t === 'pen') {
       const pen = tools.pen;
       const pressure = createPressureFilter();   // smooths raw stylus pressure for this stroke
-      drawing.current = { kind: 'pen', pen, points: [pt.x, pt.y, pressure(ev)], pressure, pointerId: ev.pointerId, rec: p.recClock?.() || undefined };
-      const l = live.current!;
+      const l = (pen === 'highlighter' ? live : liveInk).current!;
+      drawing.current = { kind: 'pen', pen, node: l, points: [pt.x, pt.y, pressure(ev)], pressure, pointerId: ev.pointerId, rec: p.recClock?.() || undefined };
       l.setAttr('nvStroke', { id: 'live', type: 'stroke', pen, x: 0, y: 0, points: drawing.current.points, color: tools.colors[pen], size: tools.sizes[pen], opacity: pen === 'highlighter' ? PEN_DEFAULTS.highlighter.opacity : tools.opacity * PEN_DEFAULTS[pen].opacity });
       l.visible(true); l.getLayer()?.batchDraw();
     } else if (t === 'eraser') {
@@ -334,14 +336,16 @@ export function InkCanvas(p: Props) {
       if (ev.pointerId !== d.pointerId) return;
       const pts: number[] = d.points;
       const events = (ev as any).getCoalescedEvents ? (ev as any).getCoalescedEvents() : [ev];
+      const box = events.length > 1 ? wrap.current!.getBoundingClientRect() : null;
+      const inv = events.length > 1 ? layer.current!.getAbsoluteTransform().copy().invert() : null;
       for (const ce of events.length ? events : [ev]) {
-        const q = events.length > 1 ? layer.current!.getAbsoluteTransform().copy().invert().point({ x: ce.clientX - wrap.current!.getBoundingClientRect().left, y: ce.clientY - wrap.current!.getBoundingClientRect().top }) : pt;
+        const q = inv && box ? inv.point({ x: ce.clientX - box.left, y: ce.clientY - box.top }) : pt;
         const lx = pts[pts.length - 3], ly = pts[pts.length - 2];
-        if ((lx - q.x) ** 2 + (ly - q.y) ** 2 < 0.8) continue;
+        if ((lx - q.x) ** 2 + (ly - q.y) ** 2 < 0.2) continue;   // ~0.45px: keeps small loops and tone marks intact
         if (d.pen === 'highlighter' && ev.shiftKey) { pts.length = 3; pts.push(q.x, pts[1], -1); }
         else pts.push(q.x, q.y, d.pressure(ce));
       }
-      live.current!.getLayer()?.batchDraw();
+      d.node.getLayer()?.batchDraw();
     } else if (d.kind === 'eraser') eraseAt(pt.x, pt.y);
     else if (d.kind === 'lasso') { d.points.push(pt.x, pt.y); setBand([...d.points]); }
     else if (d.kind === 'select') setBand([d.start.x, d.start.y, pt.x, pt.y]);
@@ -372,7 +376,8 @@ export function InkCanvas(p: Props) {
     drawing.current = null;
     if (!d) return;
     if (d.kind === 'pen') {
-      live.current!.visible(false); live.current!.getLayer()?.batchDraw();
+      d.node.visible(false); d.node.getLayer()?.batchDraw();
+      d.pressure?.learn?.();
       const pen: PenKind = d.pen;
       const stroke: StrokeObj = {
         id: nanoid(8), type: 'stroke', pen, x: 0, y: 0, points: d.points.map((n: number) => Math.round(n * 100) / 100),
@@ -563,6 +568,13 @@ export function InkCanvas(p: Props) {
   const toScreen = (x: number, y: number) => ({ x: x * view.scale + view.x, y: y * view.scale + view.y });
   const ed = editing ? byId.get(editing.id) as any : null;
 
+  const liveScene = (ctx: any, shape: Konva.Shape) => {
+    const s = shape.getAttr('nvStroke') as StrokeObj | undefined;
+    if (!s || s.points.length < 3) return;
+    const c = ctx._context as CanvasRenderingContext2D;
+    c.save(); c.globalAlpha = s.opacity ?? 1; if (s.pen === 'highlighter') c.globalCompositeOperation = 'multiply';
+    c.fillStyle = s.color; c.fill(new Path2D(svgPath(strokeOutline(s.points, s.pen, s.size)))); c.restore();
+  };
   const touchAction = readOnly || (tools.tool === 'hand' && !board) ? 'auto' : 'none';
   const cursor = ({ pen: 'crosshair', eraser: 'cell', text: 'text', sticky: 'copy', node: 'copy', table: 'copy', math: 'copy', hand: 'grab', lasso: 'crosshair', select: 'default', shape: 'crosshair', connector: 'pointer' } as Record<Tool, string>)[tools.tool];
   const stageW = board ? width : width * view.scale, stageH = board ? height : height * view.scale;
@@ -584,17 +596,14 @@ export function InkCanvas(p: Props) {
           {objects.filter((o) => o.type === 'connector').map((o) => renderObj(o))}
           {objects.filter((o) => o.type !== 'connector').map((o) => renderObj(o))}
           {ghost && renderObj(ghost, true)}
-          <Shape ref={live} visible={false} listening={false} sceneFunc={(ctx, shape) => {
-            const s = shape.getAttr('nvStroke') as StrokeObj | undefined;
-            if (!s || s.points.length < 3) return;
-            const c = (ctx as any)._context as CanvasRenderingContext2D;
-            c.save(); c.globalAlpha = s.opacity ?? 1; if (s.pen === 'highlighter') c.globalCompositeOperation = 'multiply';
-            c.fillStyle = s.color; c.fill(new Path2D(svgPath(strokeOutline(s.points, s.pen, s.size)))); c.restore();
-          }} />
+          <Shape ref={live} visible={false} listening={false} sceneFunc={liveScene} />
           {band && band.length === 4 && <Rect listening={false} x={Math.min(band[0], band[2])} y={Math.min(band[1], band[3])} width={Math.abs(band[2] - band[0])} height={Math.abs(band[3] - band[1])} fill={ACC.main + '1f'} stroke={ACC.main} dash={[6, 4]} strokeWidth={1 / view.scale} />}
           {band && band.length > 4 && <Line listening={false} points={band} closed fill={ACC.main + '14'} stroke={ACC.main} dash={[6, 4]} strokeWidth={1.5 / view.scale} />}
           <Transformer ref={tr} rotateEnabled shouldOverdrawWholeArea anchorSize={10} anchorCornerRadius={5} borderStroke={ACC.main} anchorStroke={ACC.main} anchorFill="#fff" borderDash={[4, 4]}
             boundBoxFunc={(o, n) => (Math.abs(n.width) < 8 || Math.abs(n.height) < 8 ? o : n)} onDragEnd={() => scheduleCommit()} onTransformEnd={() => scheduleCommit()} />
+        </Layer>
+        <Layer listening={false}>
+          <Shape ref={liveInk} visible={false} listening={false} sceneFunc={liveScene} />
         </Layer>
       </Stage>
       {ed && <EditOverlay o={ed} cell={editing} toScreen={toScreen} scale={view.scale} onDone={(val) => {
