@@ -345,6 +345,20 @@ export function InkCanvas(p: Props) {
         if (d.pen === 'highlighter' && ev.shiftKey) { pts.length = 3; pts.push(q.x, pts[1], -1); }
         else pts.push(q.x, q.y, d.pressure(ce));
       }
+      // Preview only: let the browser's own prediction lead the pen tip by a frame or so (iOS Safari 18.2+). Never stored.
+      const live0 = d.node.getAttr('nvStroke');
+      if (live0 && d.pen !== 'highlighter') {
+        const pred: any[] = (ev as any).getPredictedEvents ? (ev as any).getPredictedEvents() : [];
+        let ahead: number[] | null = null;
+        if (pred.length && ev.pointerType === 'pen') {
+          const b2 = box || wrap.current!.getBoundingClientRect(), iv = inv || layer.current!.getAbsoluteTransform().copy().invert();
+          const last = pts.length - 3;
+          const q = iv.point({ x: pred[0].clientX - b2.left, y: pred[0].clientY - b2.top });
+          // ignore a prediction that jumps further than the pen could plausibly travel in one frame
+          if (Math.hypot(q.x - pts[last], q.y - pts[last + 1]) < 24) ahead = [q.x, q.y, pts[last + 2]];
+        }
+        d.node.setAttr('nvStroke', { ...live0, points: ahead ? pts.concat(ahead) : pts });
+      }
       d.node.getLayer()?.batchDraw();
     } else if (d.kind === 'eraser') eraseAt(pt.x, pt.y);
     else if (d.kind === 'lasso') { d.points.push(pt.x, pt.y); setBand([...d.points]); }
@@ -376,7 +390,10 @@ export function InkCanvas(p: Props) {
     drawing.current = null;
     if (!d) return;
     if (d.kind === 'pen') {
-      d.node.visible(false); d.node.getLayer()?.batchDraw();
+      // Keep the preview up until the saved stroke has been painted, so there is no one-frame blink when the pen lifts.
+      const node = d.node, onTop = node === liveInk.current && tools.opacity >= 1;
+      const done = () => { if (drawing.current?.node === node) return; node.visible(false); node.getLayer()?.batchDraw(); };
+      if (onTop) requestAnimationFrame(() => requestAnimationFrame(done)); else done();
       d.pressure?.learn?.();
       const pen: PenKind = d.pen;
       const stroke: StrokeObj = {
