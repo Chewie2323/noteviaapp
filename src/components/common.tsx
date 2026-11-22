@@ -82,9 +82,11 @@ const NO_SUB = () => () => {};
 /** Pass `saver` so only this badge re-renders when the status changes (keeps the canvas undisturbed while writing). */
 export function SaveBadge({ saver, state: stateProp, readOnly }: { saver?: Saver; state?: SaveState; readOnly?: boolean }) {
   const state = useSyncExternalStore(saver ? saver.subscribe : NO_SUB, () => (saver ? saver.getState() : stateProp ?? 'idle'));
+  // Fixed width, no spinner animation and no pointer events: the badge never changes size, never repaints on its own and can't
+  // be hit by a stray palm or pen while writing, so a status change can't shift or disturb anything around it.
   return (
-    <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs', state === 'error' ? 'bg-red-50 text-red-600 dark:bg-red-500/10' : 'bg-muted text-muted-foreground')} role="status">
-      {readOnly ? 'View only' : state === 'saving' ? <><Loader2 className="size-3 animate-spin" /> Saving…</> : state === 'error' ? <><CloudOff className="size-3" /> Offline — retrying</> : <><Check className="size-3" /> Saved</>}
+    <span className={cn('pointer-events-none inline-flex h-6 min-w-[112px] select-none items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-2.5 text-xs [contain:layout_paint]', state === 'error' ? 'bg-red-50 text-red-600 dark:bg-red-500/10' : 'bg-muted text-muted-foreground')} role="status" aria-live="off">
+      {readOnly ? 'View only' : state === 'saving' ? <>Saving…</> : state === 'error' ? <><CloudOff className="size-3" /> Offline — retrying</> : <><Check className="size-3" /> Saved</>}
     </span>
   );
 }
