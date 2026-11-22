@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { inkIdle, watchInkActivity } from './inkActivity';
 import { nanoid } from 'nanoid';
 import type { CanvasObject, NodeObj } from '@/lib/types';
 import { db } from '@/lib/backend';
@@ -68,34 +69,60 @@ export async function storeImage(prefix: string, file: File, maxW = 420) {
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 export interface Saver {
   schedule: (key: string, fn: () => Promise<void>, ms?: number) => void;
+  /** Run any queued saves right now (used when the tab is hidden or the editor closes). */
+  flush: () => void;
   subscribe: (cb: () => void) => () => void;
   getState: () => SaveState;
 }
 /**
- * Autosave with a debounce. The save status lives OUTSIDE React state on purpose: if the editor owned it, every
- * "Saving…" / "Saved" flip would re-render the whole editor and canvas in the middle of a pen stroke. Only <SaveBadge>
- * subscribes to it, so only the little badge re-renders. The returned object is stable for the component's lifetime.
+ * Autosave with a debounce. Two things keep it from disturbing handwriting:
+ *  1. The save status lives OUTSIDE React state. If the editor owned it, every "Saving…" / "Saved" flip would re-render
+ *     the editor and canvas mid-stroke. Only <SaveBadge> subscribes, so only the little badge re-renders.
+ *  2. The save itself (serialising the page, the network request, the Realtime echo) waits until the pen has been
+ *     lifted for a moment, instead of firing in the gap between two strokes.
+ * The returned object is stable for the component's lifetime.
  */
 function createSaver(): Saver {
   let state: SaveState = 'idle';
   const subs = new Set<() => void>();
   const set = (s: SaveState) => { if (s !== state) { state = s; subs.forEach((f) => f()); } };
   const timers: Record<string, any> = {};
+  const queued: Record<string, () => Promise<void>> = {};
   let pending = 0;
-  const schedule: Saver['schedule'] = (key, fn, ms = 700) => {
+  const run = async (key: string) => {
+    const fn = queued[key];
+    if (!fn) return;
+    delete queued[key]; delete timers[key];
+    pending++;
+    try { await fn(); set(pending > 1 ? 'saving' : 'saved'); }
+    catch (e) { console.error(e); set('error'); setTimeout(() => schedule(key, fn, 3000), 0); }
+    finally { pending--; }
+  };
+  const arm = (key: string, ms: number) => {
     clearTimeout(timers[key]);
-    set('saving');
-    timers[key] = setTimeout(async () => {
-      pending++;
-      try { await fn(); set(pending > 1 ? 'saving' : 'saved'); }
-      catch (e) { console.error(e); set('error'); setTimeout(() => schedule(key, fn, 3000), 0); }
-      finally { pending--; }
+    timers[key] = setTimeout(() => {
+      if (!inkIdle(600)) { arm(key, 300); return; }   // still writing — look again shortly
+      run(key);
     }, ms);
   };
-  return { schedule, subscribe: (cb) => { subs.add(cb); return () => { subs.delete(cb); }; }, getState: () => state };
+  const schedule: Saver['schedule'] = (key, fn, ms = 900) => {
+    queued[key] = fn;
+    set('saving');
+    arm(key, ms);
+  };
+  const flush = () => { Object.keys(queued).forEach((k) => { clearTimeout(timers[k]); run(k); }); };
+  return { schedule, flush, subscribe: (cb) => { subs.add(cb); return () => { subs.delete(cb); }; }, getState: () => state };
 }
 export function useSaver(): Saver {
   const ref = useRef<Saver | null>(null);
   if (!ref.current) ref.current = createSaver();
-  return ref.current;
+  const saver = ref.current;
+  useEffect(() => {
+    watchInkActivity();
+    const hide = () => { if (document.visibilityState === 'hidden') saver.flush(); };
+    document.addEventListener('visibilitychange', hide);
+    window.addEventListener('pagehide', saver.flush);
+    return () => { document.removeEventListener('visibilitychange', hide); window.removeEventListener('pagehide', saver.flush); saver.flush(); };
+  }, [saver]);
+  return saver;
 }
