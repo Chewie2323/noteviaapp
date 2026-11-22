@@ -43,7 +43,7 @@ export default function PageEditor({ embeddedId, onClose }: { embeddedId?: strin
         {!embeddedId ? <Button size="icon" variant="ghost" aria-label="Back" onClick={() => nav(-1)}><ArrowLeft /></Button> : onClose && <Button size="icon" variant="ghost" aria-label="Close pane" onClick={onClose}><X /></Button>}
         <input aria-label="Page title" className="min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1 text-lg font-semibold outline-none focus:bg-card" defaultValue={d.name} key={d.name} disabled={!editable}
           onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== d.name) db.update('documents', d.id, { name: v, updated_at: now() }); }} />
-        <SaveBadge state={saver.state} readOnly={!editable} />
+        <SaveBadge saver={saver} readOnly={!editable} />
         {!editable && <Button size="sm" variant="secondary" onClick={async () => { const c = await duplicateDocument(app.user, d); nav(`/app/pages/${c.id}`); }}><Copy /> Make my copy</Button>}
         <Tooltip content={writing ? 'Stop writing' : 'Write on this page with a pen'}><Button size="icon" variant={writing ? 'default' : 'ghost'} aria-label="Write on page" aria-pressed={writing} onClick={() => setWriting(!writing)}><PenLine /></Button></Tooltip>
         <Tooltip content="Favourite"><Button size="icon" variant="ghost" aria-label="Favourite" onClick={() => app.toggleFav('document', d.id)}><Star className={app.isFav('document', d.id) ? 'fill-amber-400 text-amber-400' : ''} /></Button></Tooltip>

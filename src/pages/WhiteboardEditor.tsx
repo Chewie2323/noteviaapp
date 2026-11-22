@@ -121,7 +121,7 @@ export default function WhiteboardEditor({ embeddedId, onClose }: { embeddedId?:
         {embeddedId && onClose && <Button size="icon" variant="ghost" aria-label="Close pane" onClick={onClose}><X /></Button>}
         <input aria-label="Whiteboard title" className="min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1 text-base font-semibold outline-none focus:bg-card sm:text-lg" defaultValue={nb.title} key={nb.title} disabled={!editable}
           onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== nb.title) db.update('notebooks', nb.id, { title: v, updated_at: now() }); }} />
-        <div className="hidden md:block"><SaveBadge state={saver.state} readOnly={!editable} /></div>
+        <div className="hidden md:block"><SaveBadge saver={saver} readOnly={!editable} /></div>
         <Tooltip content="Fit to content"><Button size="icon" variant="ghost" aria-label="Fit to content" onClick={fitAll}><Locate /></Button></Tooltip>
         {editable && (
           <Popover>

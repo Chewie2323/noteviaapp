@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Check, CloudOff, Loader2, LayoutGrid, List } from 'lucide-react';
 import markUrl from '@/assets/brand/notevia-mark.png';
 import wordUrl from '@/assets/brand/notevia-wordmark.png';
@@ -6,7 +6,7 @@ import wordDarkUrl from '@/assets/brand/notevia-wordmark-dark.png';
 import logoUrl from '@/assets/brand/notevia-logo.png';
 import logoDarkUrl from '@/assets/brand/notevia-logo-dark.png';
 import { cn, initials, KIND_STYLE, fileKind } from '@/lib/utils';
-import type { SaveState } from '@/canvas/useInk';
+import type { SaveState, Saver } from '@/canvas/useInk';
 
 function useDark() {
   const [d, setD] = useState(() => document.documentElement.classList.contains('dark'));
@@ -78,7 +78,10 @@ export function FullSpinner({ label }: { label?: string }) {
   return <div className="grid h-full min-h-[40vh] place-items-center"><div className="flex flex-col items-center gap-3"><Spinner />{label && <span className="text-sm text-muted-foreground">{label}</span>}</div></div>;
 }
 
-export function SaveBadge({ state, readOnly }: { state: SaveState; readOnly?: boolean }) {
+const NO_SUB = () => () => {};
+/** Pass `saver` so only this badge re-renders when the status changes (keeps the canvas undisturbed while writing). */
+export function SaveBadge({ saver, state: stateProp, readOnly }: { saver?: Saver; state?: SaveState; readOnly?: boolean }) {
+  const state = useSyncExternalStore(saver ? saver.subscribe : NO_SUB, () => (saver ? saver.getState() : stateProp ?? 'idle'));
   return (
     <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs', state === 'error' ? 'bg-red-50 text-red-600 dark:bg-red-500/10' : 'bg-muted text-muted-foreground')} role="status">
       {readOnly ? 'View only' : state === 'saving' ? <><Loader2 className="size-3 animate-spin" /> Saving…</> : state === 'error' ? <><CloudOff className="size-3" /> Offline — retrying</> : <><Check className="size-3" /> Saved</>}

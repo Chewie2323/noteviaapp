@@ -66,19 +66,36 @@ export async function storeImage(prefix: string, file: File, maxW = 420) {
 }
 
 export type SaveState = 'idle' | 'saving' | 'saved' | 'error';
-export function useSaver() {
-  const [state, setState] = useState<SaveState>('idle');
-  const timers = useRef<Record<string, any>>({});
-  const pending = useRef(0);
-  const schedule = useCallback((key: string, fn: () => Promise<void>, ms = 700) => {
-    clearTimeout(timers.current[key]);
-    setState('saving');
-    timers.current[key] = setTimeout(async () => {
-      pending.current++;
-      try { await fn(); setState(pending.current > 1 ? 'saving' : 'saved'); }
-      catch (e) { console.error(e); setState('error'); setTimeout(() => schedule(key, fn, 3000), 0); }
-      finally { pending.current--; }
+export interface Saver {
+  schedule: (key: string, fn: () => Promise<void>, ms?: number) => void;
+  subscribe: (cb: () => void) => () => void;
+  getState: () => SaveState;
+}
+/**
+ * Autosave with a debounce. The save status lives OUTSIDE React state on purpose: if the editor owned it, every
+ * "Saving…" / "Saved" flip would re-render the whole editor and canvas in the middle of a pen stroke. Only <SaveBadge>
+ * subscribes to it, so only the little badge re-renders. The returned object is stable for the component's lifetime.
+ */
+function createSaver(): Saver {
+  let state: SaveState = 'idle';
+  const subs = new Set<() => void>();
+  const set = (s: SaveState) => { if (s !== state) { state = s; subs.forEach((f) => f()); } };
+  const timers: Record<string, any> = {};
+  let pending = 0;
+  const schedule: Saver['schedule'] = (key, fn, ms = 700) => {
+    clearTimeout(timers[key]);
+    set('saving');
+    timers[key] = setTimeout(async () => {
+      pending++;
+      try { await fn(); set(pending > 1 ? 'saving' : 'saved'); }
+      catch (e) { console.error(e); set('error'); setTimeout(() => schedule(key, fn, 3000), 0); }
+      finally { pending--; }
     }, ms);
-  }, []);
-  return { state, schedule };
+  };
+  return { schedule, subscribe: (cb) => { subs.add(cb); return () => { subs.delete(cb); }; }, getState: () => state };
+}
+export function useSaver(): Saver {
+  const ref = useRef<Saver | null>(null);
+  if (!ref.current) ref.current = createSaver();
+  return ref.current;
 }

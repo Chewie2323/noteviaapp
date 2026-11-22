@@ -31,7 +31,7 @@ export default function DocInk({ embeddedId, onClose }: { embeddedId?: string; o
           <div className="truncate font-semibold">{d.name}</div>
           <div className="hidden text-[11px] text-muted-foreground sm:block">Your handwriting is a private layer — the original file is never modified</div>
         </div>
-        <SaveBadge state={ink.saveState} />
+        <SaveBadge saver={ink.saver} />
         <Tooltip content={writing ? 'Stop writing (scroll & select)' : 'Write on this document'}>
           <Button size="sm" variant={writing ? 'default' : 'secondary'} aria-pressed={writing} onClick={() => setWriting(!writing)}><PenLine /><span className="hidden sm:inline">{writing ? 'Writing' : 'Write'}</span></Button>
         </Tooltip>

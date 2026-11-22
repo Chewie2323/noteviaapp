@@ -252,7 +252,7 @@ export default function PdfAnnotator({ embeddedId, onClose }: { embeddedId?: str
           <div className="truncate font-semibold">{doc.name}</div>
           <div className="hidden text-[11px] text-muted-foreground sm:block">Your annotations are a private layer — the original document is never modified</div>
         </div>
-        <div className="hidden md:block"><SaveBadge state={saver.state} /></div>
+        <div className="hidden md:block"><SaveBadge saver={saver} /></div>
         {view === 'page' && <Tooltip content="All pages"><Button size="sm" variant="secondary" aria-label="All pages" onClick={showGrid}><LayoutGrid /><span className="hidden sm:inline">Pages</span></Button></Tooltip>}
         <Tooltip content="Search text"><Button size="icon" variant={panel === 'search' ? 'secondary' : 'ghost'} aria-label="Search" onClick={() => setPanel(panel === 'search' ? null : 'search')}><Search /></Button></Tooltip>
         <Tooltip content="Comments"><Button size="icon" variant={panel === 'comments' ? 'secondary' : 'ghost'} aria-label="Comments" onClick={() => setPanel(panel === 'comments' ? null : 'comments')}><MessageSquare /></Button></Tooltip>

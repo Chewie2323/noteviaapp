@@ -44,7 +44,7 @@ export function useDocInk(docId: string | undefined) {
   const redo = () => { const v = hist.redo(KEY, objects); if (v) setObjects(v, false); };
   const ops = selectionOps(objects, selected);
   return {
-    ready: !!ann, objects, setObjects, undo, redo, tools, setTools, selected, setSelected, saveState: saver.state,
+    ready: !!ann, objects, setObjects, undo, redo, tools, setTools, selected, setSelected, saver,
     canUndo: hist.canUndo(KEY), canRedo: hist.canRedo(KEY),
     toolbar: (
       <Toolbar tools={tools} setTools={setTools} canUndo={hist.canUndo(KEY)} canRedo={hist.canRedo(KEY)} onUndo={undo} onRedo={redo}

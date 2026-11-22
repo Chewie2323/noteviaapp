@@ -257,7 +257,7 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
         <input aria-label="Notebook title" className="min-w-0 flex-1 rounded-lg bg-transparent px-2 py-1 text-base font-semibold outline-none focus:bg-card max-sm:order-last max-sm:basis-full sm:text-lg"
           defaultValue={nb.title} key={nb.title} disabled={!editable} maxLength={200}
           onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== nb.title) db.update('notebooks', nb.id, { title: v, updated_at: now() }); }} />
-        <div className="hidden md:block"><SaveBadge state={saver.state} readOnly={!editable} /></div>
+        <div className="hidden md:block"><SaveBadge saver={saver} readOnly={!editable} /></div>
         {!editable && <Button size="sm" variant="secondary" onClick={async () => { const c = await duplicateNotebook(app.user, nb, `${nb.title} (my copy)`); app.toast('Your editable copy is ready'); nav(`/app/notebooks/${c.id}`); }}><Copy /> Make my copy</Button>}
         <Tooltip content="Favourite"><Button size="icon" variant="ghost" aria-label="Favourite" onClick={() => app.toggleFav('notebook', nb.id)}><Star className={app.isFav('notebook', nb.id) ? 'fill-amber-400 text-amber-400' : ''} /></Button></Tooltip>
         {!embedded && <Tooltip content="Split screen"><Button size="icon" variant="ghost" aria-label="Split screen" onClick={() => nav(`/app/split?left=notebook:${nb.id}`)}><Columns2 /></Button></Tooltip>}
