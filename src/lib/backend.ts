@@ -96,13 +96,19 @@ export function startRealtime() {
   realtimeStarted = true;
   const pending = new Set<string>();
   let t: any;
-  supabase.channel('nv-changes')
-    .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+  // One subscription per table, deliberately WITHOUT notebook_pages: a page row holds all of its ink, so echoing every autosave
+  // back to the device that just saved it meant downloading and parsing the whole page right after each pause in writing.
+  // The notebook editor loads its pages once and never listens for them, so nothing depends on those events.
+  const TABLES = ['profiles', 'workspaces', 'folders', 'documents', 'notebooks', 'templates', 'annotations', 'classrooms', 'classroom_members', 'announcements', 'invitations', 'resource_links', 'assignments', 'submissions', 'feedback', 'calendar_events', 'tasks', 'notifications', 'shares', 'comments', 'activity_logs', 'versions', 'favourites', 'recent_items', 'downloads', 'platform_settings', 'flashcard_decks', 'flashcards'];
+  let ch = supabase.channel('nv-changes');
+  for (const table of TABLES) {
+    ch = ch.on('postgres_changes', { event: '*', schema: 'public', table }, (payload) => {
       pending.add(payload.table);
       clearTimeout(t);
       t = setTimeout(() => { pending.forEach(emit); pending.clear(); }, 250);
-    })
-    .subscribe();
+    });
+  }
+  ch.subscribe();
 }
 
 type Row = Record<string, any> & { id: string };

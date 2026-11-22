@@ -95,7 +95,7 @@ function createSaver(): Saver {
     delete queued[key]; delete timers[key];
     pending++;
     try { await fn(); set(pending > 1 ? 'saving' : 'saved'); }
-    catch (e) { console.error(e); set('error'); setTimeout(() => schedule(key, fn, 3000), 0); }
+    catch (e) { console.error(e); set('error'); setTimeout(() => { if (!queued[key]) schedule(key, fn, 3000); }, 0); }   // never overwrite a newer queued save with this older one
     finally { pending--; }
   };
   const arm = (key: string, ms: number) => {

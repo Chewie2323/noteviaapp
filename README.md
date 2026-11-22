@@ -49,7 +49,6 @@ If Supabase keys aren't configured, Notevia runs in **demo mode**:
 
 ```bash
 supabase functions deploy delete-account      # self-service account deletion (UK GDPR)
-supabase functions deploy notevia-ai          # optional AI assistant
 supabase secrets set ANTHROPIC_API_KEY=...    # only if you enable AI
 supabase secrets set AI_MODEL=claude-sonnet-4-5
 ```

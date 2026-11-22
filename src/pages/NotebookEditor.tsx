@@ -26,6 +26,8 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { NativeSelect, Label } from '@/components/ui/input';
 import { Tooltip } from '@/components/ui/misc';
 import { Empty, FullSpinner, SaveBadge } from '@/components/common';
+import { clearDraft, loadDraft, saveDraft } from '@/lib/drafts';
+import { inkIdle } from '@/canvas/inkActivity';
 import { ShareDialog } from '@/components/ShareDialog';
 import { CollabPanel } from '@/components/CollabPanel';
 import { MathDialog } from '@/components/MathDialog';
@@ -44,7 +46,13 @@ function useCustomImages(pages: NotebookPage[] | null) {
 function Thumb({ page, active, index, img, onClick, draggable, onDragStart, onDrop }: any) {
   const [src, setSrc] = useState('');
   const d = pageDims(page.paper_size, page.orientation);
-  useEffect(() => { const t = setTimeout(async () => setSrc((await renderPage({ template: page.template, objects: page.objects, w: d.w, h: d.h, scale: 0.18, customImage: img })).toDataURL('image/jpeg', 0.7)), 300); return () => clearTimeout(t); }, [page.objects, page.template, page.orientation, page.paper_size, img]);
+  useEffect(() => {
+    let t: any, dead = false;
+    // redrawing the thumbnail is heavy, so wait until the pen has been up for a moment instead of doing it right after every stroke
+    const go = () => { if (dead) return; if (!inkIdle(900)) { t = setTimeout(go, 400); return; } renderPage({ template: page.template, objects: page.objects, w: d.w, h: d.h, scale: 0.18, customImage: img }).then((c) => { if (!dead) setSrc(c.toDataURL('image/jpeg', 0.7)); }); };
+    t = setTimeout(go, 300);
+    return () => { dead = true; clearTimeout(t); };
+  }, [page.objects, page.template, page.orientation, page.paper_size, img]);
   return (
     <button onClick={onClick} draggable={draggable} onDragStart={onDragStart} onDragOver={(e) => e.preventDefault()} onDrop={onDrop} aria-label={`Page ${index + 1}`} aria-current={active}
       className={cn('block w-full rounded-xl p-1.5 transition', active ? 'bg-secondary ring-2 ring-lavender-deep' : 'hover:bg-muted')}>
@@ -84,6 +92,7 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
   const chips = useRef<Record<string, { seek: (ms: number) => void } | null>>({});
   const hist = useHistory();
   const saver = useSaver();
+  const recovered = useRef<string[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const tplInput = useRef<HTMLInputElement>(null);
@@ -97,7 +106,16 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
 
   useEffect(() => {
     if (!id) return;
-    db.list<NotebookPage>('notebook_pages', { notebook_id: id }, { col: 'position', asc: true }).then(setPages);
+    db.list<NotebookPage>('notebook_pages', { notebook_id: id }, { col: 'position', asc: true }).then(async (ps) => {
+      // put back any writing that could not be saved last time (e.g. the connection dropped)
+      const merged = await Promise.all(ps.map(async (p) => {
+        const d = await loadDraft(p.id);
+        if (d && d.at > Date.parse(p.updated_at || '') + 1000) { recovered.current.push(p.id); return { ...p, ...d.patch }; }
+        if (d) clearDraft(p.id);
+        return p;
+      }));
+      setPages(merged);
+    });
     app.touchRecent('notebook', id);
   }, [id]);
   useEffect(() => {
@@ -108,8 +126,12 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
 
   const persist = useCallback((pg: NotebookPage) => {
     saver.schedule(pg.id, async () => {
-      await db.update('notebook_pages', pg.id, { objects: pg.objects, audio: pg.audio, template: pg.template, paper_size: pg.paper_size, orientation: pg.orientation, updated_at: now() }, true);
-      await db.update('notebooks', pg.notebook_id, { updated_at: now() }, true);
+      const patch = { objects: pg.objects, audio: pg.audio, template: pg.template, paper_size: pg.paper_size, orientation: pg.orientation };
+      try {
+        await db.update('notebook_pages', pg.id, { ...patch, updated_at: now() }, true);
+        await db.update('notebooks', pg.notebook_id, { updated_at: now() }, true);
+        clearDraft(pg.id);
+      } catch (e) { await saveDraft(pg.id, patch); throw e; }   // keep a copy on this device, then let the saver retry
     });
     if (!logged.current && nb) { logged.current = true; app.log('edited', 'notebook', nb.id, nb.title); }
   }, [saver, nb]);
@@ -121,6 +143,12 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
     setPages(pages.map((p, i) => (i === active ? next : p)));
     persist(next);
   }, [pages, page, active, persist]);
+  useEffect(() => {
+    if (!pages || !recovered.current.length) return;
+    const ids = recovered.current; recovered.current = [];
+    pages.filter((p) => ids.includes(p.id)).forEach(persist);
+    app.toast('Restored writing that hadn’t finished saving');
+  }, [pages, persist]);
   const patchPage = (patch: Partial<NotebookPage>, all = false) => {
     if (!pages || !page) return;
     const next = pages.map((p, i) => (all || i === active ? { ...p, ...patch } : p));
