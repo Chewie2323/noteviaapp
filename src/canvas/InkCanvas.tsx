@@ -58,6 +58,7 @@ interface Props {
 }
 
 const SELECTABLE: Tool[] = ['select', 'lasso'];
+const OBJ_TOOLS: Tool[] = ['text', 'sticky', 'node'];   // tools whose own objects can be moved / multi-selected without switching to the lasso
 const CREATES_ON_DOWN: Tool[] = ['text', 'sticky', 'node', 'table', 'math'];
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v));
 
@@ -77,6 +78,12 @@ function strokeHit(o: StrokeObj, px: number, py: number, r: number) {
     lx0 = x; ly0 = y;
   }
   return false;
+}
+
+/** Text-tool hit area: a 10px margin around typed text so a click just beside or above a line still grabs it instead of starting a new box. */
+function textHit(ctx: any, shape: Konva.Shape) {
+  const m = 10;
+  ctx.beginPath(); ctx.rect(-m, -m, shape.width() + 2 * m, shape.height() + 2 * m); ctx.closePath(); ctx.fillStrokeShape(shape);
 }
 
 function useImg(src: string) {
@@ -149,6 +156,7 @@ export function InkCanvas(p: Props) {
 
   useEffect(() => { if (p.stageRef) p.stageRef.current = stage.current; });
   useEffect(() => { setLivePos({}); }, [objects]);
+  useEffect(() => { const c = stage.current?.container(); if (c) c.style.cursor = ''; }, [tools.tool]);
   useEffect(() => { if (tools.tool !== 'connector') setConnFrom(null); p.onHint?.(tools.tool === 'connector' ? 'Tap the first object, then the second, to connect them' : null); }, [tools.tool]);
 
   // transformer ↔ selection
@@ -156,7 +164,7 @@ export function InkCanvas(p: Props) {
     const t = tr.current, l = layer.current;
     if (!t || !l) return;
     const nodes = selected.map((id) => (byId.get(id)?.type === 'connector' ? null : l.findOne('#' + id))).filter(Boolean) as Konva.Node[];
-    t.nodes(SELECTABLE.includes(tools.tool) && !readOnly ? nodes : []);
+    t.nodes((SELECTABLE.includes(tools.tool) || OBJ_TOOLS.includes(tools.tool)) && !readOnly ? nodes : []);
     t.getLayer()?.batchDraw();
   }, [selected, objects, tools.tool, readOnly]);
 
@@ -267,6 +275,7 @@ export function InkCanvas(p: Props) {
   };
 
   const startAction = (e: Konva.KonvaEventObject<PointerEvent>) => {
+    if (e.target.getParent()?.className === 'Transformer') return;   // grabbing a handle / selection box must never create something
     const ev = e.evt;
     const pt = pos();
     const onObject = !!e.target.findAncestor?.('.obj', true);
@@ -567,9 +576,13 @@ export function InkCanvas(p: Props) {
       return;
     }
     if (tools.tool === 'eraser' && o.type !== 'stroke') return;
-    if (!SELECTABLE.includes(tools.tool)) return;
-    e.cancelBubble = true;
     const multi = e.evt?.shiftKey || e.evt?.metaKey || e.evt?.ctrlKey;
+    if (!SELECTABLE.includes(tools.tool)) {
+      // Shift / Ctrl / Cmd-click adds or removes an object from the selection without leaving the Text / Sticky / Node tool
+      if (multi && OBJ_TOOLS.includes(tools.tool) && o.type !== 'connector') { e.cancelBubble = true; p.onSelect(selected.includes(o.id) ? selected.filter((x) => x !== o.id) : [...selected, o.id]); }
+      return;
+    }
+    e.cancelBubble = true;
     if (multi) p.onSelect(selected.includes(o.id) ? selected.filter((x) => x !== o.id) : [...selected, o.id]);
     else if (!selected.includes(o.id)) p.onSelect([o.id]);
   };
@@ -598,12 +611,15 @@ export function InkCanvas(p: Props) {
 
   const renderObj = (o: CanvasObject, isGhost = false) => {
     const sel = selected.includes(o.id);
+    const canDrag = !readOnly && !isGhost && (tools.tool === 'select' || (tools.tool === 'lasso' && sel) || (OBJ_TOOLS.includes(tools.tool) && (sel || tools.tool === o.type)));
     const common: any = {
       key: o.id, id: isGhost ? undefined : o.id, name: isGhost ? 'ghost' : 'obj', x: o.x, y: o.y,
       rotation: o.rotation || 0, scaleX: o.scaleX ?? 1, scaleY: o.scaleY ?? 1,
       opacity: erasing.has(o.id) ? 0.15 : o.type === 'stroke' ? ((o as StrokeObj).rec && p.playback && (o as StrokeObj).rec!.clip === p.playback.clip && (o as StrokeObj).rec!.ms > p.playback.ms ? 0.12 : 1) : o.opacity ?? 1,
       // Typed objects can be dragged straight away with their own tool (no lasso needed): drag = move, tap = edit.
-      draggable: !readOnly && !isGhost && (tools.tool === 'select' || (tools.tool === 'lasso' && sel) || (tools.tool === 'text' && o.type === 'text') || (tools.tool === 'sticky' && o.type === 'sticky') || (tools.tool === 'node' && o.type === 'node')),
+      draggable: canDrag,
+      onMouseEnter: (e: any) => { const c = e.target.getStage()?.container(); if (c && canDrag && tools.tool !== 'select') c.style.cursor = 'grab'; },
+      onMouseLeave: (e: any) => { const c = e.target.getStage()?.container(); if (c) c.style.cursor = ''; },
       onPointerDown: (e: any) => onObjDown(o, e),
       onDragStart: () => { if (!selected.includes(o.id)) p.onSelect([o.id]); },
       onDragMove: (e: any) => { const n = e.target; setLivePos((lp) => ({ ...lp, [o.id]: { x: n.x(), y: n.y() } })); },
@@ -656,7 +672,7 @@ export function InkCanvas(p: Props) {
           <Group {...common}>
             <Label opacity={editing?.id === o.id ? 0 : 1}>
               <Tag fill={o.highlight || undefined} cornerRadius={3} />
-              <Text text={o.text || ' '} width={o.width} fontSize={o.fontSize} fontFamily={FONT} fill={o.color} lineHeight={1.35} wrap="word" align={o.align || 'left'}
+              <Text hitFunc={tools.tool === 'text' ? textHit : undefined} text={o.text || ' '} width={o.width} fontSize={o.fontSize} fontFamily={FONT} fill={o.color} lineHeight={1.35} wrap="word" align={o.align || 'left'}
                 fontStyle={`${o.italic ? 'italic ' : ''}${o.bold ? 'bold' : 'normal'}`} textDecoration={o.underline ? 'underline' : ''} padding={2} />
             </Label>
           </Group>
