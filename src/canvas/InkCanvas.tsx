@@ -770,7 +770,8 @@ function EditOverlay({ o, cell, toScreen, scale, onDone }: { o: any; cell: { r?:
   return (
     <textarea autoFocus defaultValue={value} aria-label="Edit text"
       placeholder={o.type === 'sticky' ? 'Note…' : o.type === 'table' ? '' : 'Type here…'}
-      onFocus={(e) => e.currentTarget.select()}
+      // Typed text: caret at the end, so a stray keystroke can't wipe the whole line. Other objects keep select-all.
+      onFocus={(e) => { const t = e.currentTarget; if (o.type === 'text') t.setSelectionRange(t.value.length, t.value.length); else t.select(); }}
       onBlur={(e) => onDone(e.target.value)}
       onKeyDown={(e) => {
         if (e.key === 'Escape') (e.target as HTMLTextAreaElement).blur();
