@@ -602,13 +602,17 @@ export function InkCanvas(p: Props) {
       key: o.id, id: isGhost ? undefined : o.id, name: isGhost ? 'ghost' : 'obj', x: o.x, y: o.y,
       rotation: o.rotation || 0, scaleX: o.scaleX ?? 1, scaleY: o.scaleY ?? 1,
       opacity: erasing.has(o.id) ? 0.15 : o.type === 'stroke' ? ((o as StrokeObj).rec && p.playback && (o as StrokeObj).rec!.clip === p.playback.clip && (o as StrokeObj).rec!.ms > p.playback.ms ? 0.12 : 1) : o.opacity ?? 1,
-      draggable: !readOnly && !isGhost && (tools.tool === 'select' || (tools.tool === 'lasso' && sel)),
+      // Typed objects can be dragged straight away with their own tool (no lasso needed): drag = move, tap = edit.
+      draggable: !readOnly && !isGhost && (tools.tool === 'select' || (tools.tool === 'lasso' && sel) || (tools.tool === 'text' && o.type === 'text') || (tools.tool === 'sticky' && o.type === 'sticky') || (tools.tool === 'node' && o.type === 'node')),
       onPointerDown: (e: any) => onObjDown(o, e),
       onDragStart: () => { if (!selected.includes(o.id)) p.onSelect([o.id]); },
       onDragMove: (e: any) => { const n = e.target; setLivePos((lp) => ({ ...lp, [o.id]: { x: n.x(), y: n.y() } })); },
       onDragEnd: () => scheduleCommit(o.id),
       onTransformEnd: () => scheduleCommit(),
       onDblClick: () => onObjDbl(o), onDblTap: () => onObjDbl(o),
+      // With the Text tool, a plain tap on existing text edits it (Konva does not fire a click after a drag, so moving never opens the editor)
+      onClick: () => { if (tools.tool === 'text' && o.type === 'text' && !readOnly) setEditing({ id: o.id }); },
+      onTap: () => { if (tools.tool === 'text' && o.type === 'text' && !readOnly) setEditing({ id: o.id }); },
       // While writing/erasing nothing needs to be clickable. Not listening means Konva skips drawing every stroke into its
       // hidden hit canvas (the biggest cost after each saved stroke) and has nothing to hit-test.
       listening: !readOnly && !isGhost && tools.tool !== 'pen' && tools.tool !== 'eraser',
