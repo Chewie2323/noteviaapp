@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Lock, Users, UserPlus, Trash2, Globe2 } from 'lucide-react';
+import { Lock, Users, UserPlus, Trash2, Globe2, Link2 } from 'lucide-react';
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect } from '@/components/ui/input';
@@ -50,12 +50,13 @@ export function ShareDialog({ open, onOpenChange, type, id, name }: { open: bool
         <DialogHeader><DialogTitle>Share “{name}”</DialogTitle><DialogDescription>Only people and classrooms listed below can open this {label}. Everyone else — including administrators — cannot.</DialogDescription></DialogHeader>
         <DialogBody className="space-y-5">
           <div>
-            <div className="mb-2 text-xs font-medium text-muted-foreground">Add a person by email</div>
-            <div className="flex flex-wrap gap-2">
-              <Input className="min-w-[220px] flex-1" type="email" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addEmail()} />
-              <NativeSelect className="w-40" value={perm} onChange={(e) => setPerm(e.target.value as Permission)} aria-label="Permission">{PERMS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</NativeSelect>
-              <Button onClick={addEmail} disabled={busy || !email}><UserPlus /> Share</Button>
+            <div className="mb-2 text-xs font-medium text-muted-foreground">Or add people</div>
+            <Input className="h-12 rounded-2xl" type="email" placeholder="name@example.com" value={email} onChange={(e) => setEmail(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && addEmail()} />
+            <div className="mt-3 text-xs font-medium text-muted-foreground">They can</div>
+            <div className="mt-2 flex gap-2" role="radiogroup" aria-label="Permission">
+              {PERMS.map((p) => <button key={p.id} role="radio" aria-checked={perm === p.id} onClick={() => setPerm(p.id)} className={`h-10 flex-1 rounded-full text-sm font-medium transition ${perm === p.id ? 'bg-[#E6DFF5] text-[#4E3F80] ring-1 ring-[#B9A5E8]' : 'bg-muted text-foreground/70'}`}>{p.label.replace('View only', 'View').replace('Can comment', 'Comment').replace('Can edit', 'Edit')}</button>)}
             </div>
+            <Button size="lg" className="mt-3 w-full" onClick={addEmail} disabled={busy || !email}><UserPlus /> Share</Button>
             {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
           </div>
           {myClasses.length > 0 && (
@@ -86,7 +87,10 @@ export function ShareDialog({ open, onOpenChange, type, id, name }: { open: bool
           </div>
           <p className="flex items-start gap-2 text-xs text-muted-foreground"><Globe2 className="mt-0.5 size-3.5 shrink-0" /> Notevia never creates public links. Folder access also applies to everything inside the folder.</p>
         </DialogBody>
-        <DialogFooter><Button onClick={() => onOpenChange(false)}>Done</Button></DialogFooter>
+        <DialogFooter className="justify-between">
+          {(type === 'notebook' || type === 'document') ? <Button variant="outline" onClick={async () => { const path = type === 'notebook' ? `/app/notebooks/${id}` : `/app/documents?open=${id}`; const base = import.meta.env.VITE_HASH_ROUTER === 'true' ? `${location.origin}${location.pathname}#` : location.origin; try { await navigator.clipboard.writeText(base + path); app.toast('Link copied — only people you share with can open it'); } catch { app.toast('Could not copy the link', 'err'); } }}><Link2 /> Copy link</Button> : <span />}
+          <Button onClick={() => onOpenChange(false)}>Done</Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

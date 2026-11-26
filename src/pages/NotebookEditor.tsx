@@ -311,7 +311,7 @@ export default function NotebookEditor({ embeddedId, onClose }: { embeddedId?: s
             zoom={zoom} setZoom={setZoom} onImage={onImage} onAudio={() => setPanel('audio')} selection={selObjs} hint={hint}
             onPatch={(fn) => ops && setObjects(ops.patch(fn))} onDelete={() => { if (ops) { setObjects(ops.remove()); setSelected([]); } }}
             onDuplicate={() => { if (ops) { const r = ops.duplicate(); setObjects(r.objects); setSelected(r.ids); } }} onOrder={(f) => ops && setObjects(ops.order(f))} onAddChild={addChild}
-            extra={<button onClick={() => setSetup(true)} className="hidden h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs hover:bg-muted lg:flex"><LayoutTemplate className="size-4" /> {templateLabel(page?.template || 'blank')} · {page?.paper_size} {page?.orientation === 'landscape' ? '↔' : '↕'}</button>} />
+            extra={<button onClick={() => setSetup(true)} className="hidden h-9 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-xs hover:bg-white/10 lg:flex"><LayoutTemplate className="size-4" /> {templateLabel(page?.template || 'blank')} · {page?.paper_size} {page?.orientation === 'landscape' ? '↔' : '↕'}</button>} />
         </div>
       )}
 

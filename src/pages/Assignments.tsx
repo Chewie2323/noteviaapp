@@ -25,7 +25,7 @@ import { createNotebook } from '@/lib/actions';
 import { cn, fileKind, fmtDateTime, safeName, saveBlob, timeAgo, toLocalInput } from '@/lib/utils';
 
 export type DisplayStatus = 'assigned' | 'in_progress' | 'submitted' | 'under_review' | 'returned' | 'completed' | 'overdue';
-export const STATUS_LABEL: Record<DisplayStatus, string> = { assigned: 'Assigned', in_progress: 'In progress', submitted: 'Submitted', under_review: 'Under review', returned: 'Returned', completed: 'Completed', overdue: 'Overdue' };
+export const STATUS_LABEL: Record<DisplayStatus, string> = { assigned: 'Not started', in_progress: 'In progress', submitted: 'Submitted', under_review: 'Under review', returned: 'Returned', completed: 'Completed', overdue: 'Overdue' };
 export const STATUS_TONE: Record<DisplayStatus, BadgeTone> = { assigned: 'neutral', in_progress: 'blue', submitted: 'lavender', under_review: 'peach', returned: 'pink', completed: 'sage', overdue: 'danger' };
 export function submissionStatus(a: Assignment, s?: Submission | null): DisplayStatus {
   const late = new Date(a.due_at).getTime() < Date.now();
@@ -263,8 +263,8 @@ function StudentSubmission({ a, existing }: { a: Assignment; existing?: Submissi
           <Button size="sm" variant="ghost" onClick={async () => { const n = await createNotebook(app.user, { title: `${a.title} — my work` }); setNbIds([...nbIds, n.id]); if (existing) await db.update('submissions', existing.id, { notebook_ids: [...nbIds, n.id] }); else await db.insert('submissions', { assignment_id: a.id, student_id: app.user.id, text_html: html, files, notebook_ids: [...nbIds, n.id], status: 'in_progress', updated_at: now() }); nav(`/app/notebooks/${n.id}`); }}><Plus /> New notebook for this</Button>
           <input ref={ref} type="file" multiple hidden onChange={(e) => { addFiles(Array.from(e.target.files || [])); e.target.value = ''; }} />
         </div>}
-        <div className="mt-4 flex flex-wrap justify-end gap-2">
-          {!locked && <><Button variant="outline" onClick={() => save(false)}><Save /> Save draft</Button><Button onClick={() => save(true)} disabled={busy || (!html.replace(/<[^>]+>/g, '').trim() && !files.length && !nbIds.length)}><Send /> {existing?.status === 'returned' ? 'Resubmit' : 'Submit'}</Button></>}
+        <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 -mx-5 -mb-5 mt-4 flex flex-wrap justify-end gap-2 rounded-b-2xl border-t border-border bg-card/95 px-5 py-3 backdrop-blur lg:static lg:mx-0 lg:mb-0 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+          {!locked && <><Button variant="outline" onClick={() => save(false)}><Save /> Save draft</Button><Button size="lg" onClick={() => save(true)} disabled={busy || (!html.replace(/<[^>]+>/g, '').trim() && !files.length && !nbIds.length)}><Send /> {existing?.status === 'returned' ? 'Resubmit' : 'Hand in'}</Button></>}
           {locked && existing?.status !== 'completed' && <p className="text-sm text-muted-foreground">Submitted — you can edit again if your educator returns it.</p>}
         </div>
         <p className="mt-3 text-[11px] text-muted-foreground">Only you and your educator can see this submission.</p>

@@ -83,16 +83,16 @@ export function Login() {
 }
 
 const ROLES: { id: Exclude<Role, 'admin'>; label: string; desc: string; icon: any }[] = [
+  { id: 'student', label: 'Student', desc: 'Join classes, take notes, hand in work', icon: NotebookPen },
   { id: 'educator', label: 'Educator', desc: 'Teach classes, share materials, set and mark work', icon: GraduationCap },
-  { id: 'student', label: 'Student', desc: 'Join classrooms, take notes, submit assignments', icon: NotebookPen },
-  { id: 'individual', label: 'Individual', desc: 'Personal notes, research and professional work', icon: BriefcaseBusiness },
+  { id: 'individual', label: 'Just for me', desc: 'Personal notes, research and projects', icon: BriefcaseBusiness },
 ];
 
 export function Register() {
   const nav = useNavigate();
   const [params] = useSearchParams();
   const invite = params.get('invite') || undefined;
-  const [v, setV] = useState({ full_name: '', email: params.get('email') || '', password: '', role: (params.get('role') as any) || (invite ? 'student' : 'educator'), organisation: '', code: params.get('code') || '' });
+  const [v, setV] = useState({ full_name: '', email: params.get('email') || '', password: '', role: (params.get('role') as any) || 'student', organisation: '', code: params.get('code') || '' });
   const [agree, setAgree] = useState(false);
   const [err, setErr] = useState(''); const [busy, setBusy] = useState(false); const [verify, setVerify] = useState(false);
   const submit = async (e: React.FormEvent) => {
@@ -137,10 +137,11 @@ export function Register() {
           <legend className="mb-1.5 text-xs font-medium text-muted-foreground">I’m using Notevia as…</legend>
           <div className="grid gap-2">
             {ROLES.map((r) => (
-              <label key={r.id} className={cn('flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition', v.role === r.id ? 'border-lavender-deep bg-secondary/60' : 'border-border hover:bg-muted')}>
+              <label key={r.id} className={cn('flex cursor-pointer items-center gap-3 rounded-2xl border p-4 transition', v.role === r.id ? 'border-[#7C6FD1] bg-[#E6DFF5]/60' : 'border-border bg-card hover:bg-muted')}>
                 <input type="radio" name="role" className="sr-only" checked={v.role === r.id} onChange={() => setV({ ...v, role: r.id })} />
                 <span className="grid h-9 w-9 place-items-center rounded-lg bg-card"><r.icon className="size-4 text-lavender-deep" /></span>
-                <span><span className="block text-sm font-medium">{r.label}</span><span className="text-xs text-muted-foreground">{r.desc}</span></span>
+                <span className="min-w-0 flex-1"><span className="block text-sm font-semibold">{r.label}</span><span className="text-xs text-muted-foreground">{r.desc}</span></span>
+                <span className={cn('grid h-5 w-5 shrink-0 place-items-center rounded-full border-2', v.role === r.id ? 'border-[#7C6FD1]' : 'border-border')}>{v.role === r.id && <span className="h-2.5 w-2.5 rounded-full bg-[#7C6FD1]" />}</span>
               </label>
             ))}
           </div>
@@ -152,7 +153,7 @@ export function Register() {
         {v.role === 'student' && !invite && <div><Label htmlFor="code" hint="optional">Classroom code</Label><Input id="code" className="uppercase" maxLength={10} value={v.code} onChange={(e) => setV({ ...v, code: e.target.value })} placeholder="e.g. 7K2Q9XA" /></div>}
         <label className="flex items-start gap-2 text-xs text-muted-foreground"><input type="checkbox" className="mt-0.5 accent-primary" checked={agree} onChange={(e) => setAgree(e.target.checked)} /> I agree to the <Link to="/terms" className="underline">Terms of service</Link> and <Link to="/privacy" className="underline">Privacy policy</Link>.</label>
         {err && <p className="text-sm text-red-600" role="alert">{err}</p>}
-        <Button className="w-full" disabled={busy}>{busy && <Loader2 className="animate-spin" />} Create account</Button>
+        <Button size="lg" className="w-full" disabled={busy}>{busy && <Loader2 className="animate-spin" />} Continue</Button>
       </form>
       <p className="mt-4 text-center text-sm text-muted-foreground">Already have an account? <Link to="/login" className="text-lavender-ink hover:underline dark:text-lavender">Sign in</Link></p>
     </Shell>

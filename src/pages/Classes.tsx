@@ -5,6 +5,7 @@ import {
   Copy, Mail, RefreshCw, Trash2, Pencil, ArrowLeft, Share2, Send, UserPlus, ExternalLink, Image as ImageIcon, Archive,
 } from 'lucide-react';
 import { useApp, ask } from '@/lib/app';
+import { joinByCode } from '@/lib/actions';
 import { useRow, useTable } from '@/lib/hooks';
 import { db, now, supabase, uid } from '@/lib/backend';
 import type { Announcement, Assignment, CalendarEvent, Classroom, ClassroomMember, DocumentRow, Feedback, Invitation, Notebook, ResourceLink, Share, Submission } from '@/lib/types';
@@ -54,24 +55,19 @@ export default function Classes() {
     <div className="animate-fade-up">
       <PageHeader icon={<GraduationCap />} title="My Classes" subtitle={isTeacher ? 'Private classrooms for individual students or groups — any subject, any level.' : 'Classrooms you belong to.'}
         actions={<><Button variant="outline" onClick={() => setJoin(true)}><KeyRound /> Join with code</Button>{isTeacher && <Button onClick={() => setEdit({})}><Plus /> Create classroom</Button>}</>} />
+      <JoinCard />
       {mine.length ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           {mine.map((c) => {
             const m = members.filter((x) => x.classroom_id === c.id);
             const teacher = app.profile(c.owner_id);
             const due = asg.filter((a) => a.classroom_id === c.id && new Date(a.due_at) > new Date()).length;
             return (
-              <Link key={c.id} to={`/app/classes/${c.id}`} className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft transition hover:-translate-y-0.5 hover:shadow-lift">
-                <ClassCover c={c} className="h-24" />
-                <div className="p-5">
-                  <div className="flex items-start justify-between gap-2"><h3 className="font-semibold">{c.name}</h3>{c.owner_id === app.user.id && <Badge tone="lavender">Teaching</Badge>}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">{c.subject}{teacher && c.owner_id !== app.user.id ? ` · ${teacher.full_name}` : ''}</div>
-                  <p className="mt-2 line-clamp-2 min-h-[2.5rem] text-sm text-muted-foreground">{c.description}</p>
-                  <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1"><Users className="size-3.5" /> {c.owner_id === app.user.id ? `${m.length} student${m.length === 1 ? '' : 's'}` : 'Member'}</span>
-                    <span className="flex items-center gap-1"><ClipboardCheck className="size-3.5" /> {due} upcoming</span>
-                  </div>
-                </div>
+              <Link key={c.id} to={`/app/classes/${c.id}`} className="relative block overflow-hidden rounded-3xl p-5 shadow-soft transition active:scale-[.99]" style={{ background: c.cover_color }}>
+                <div className="absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/35" />
+                <h3 className="relative text-lg font-bold text-charcoal">{c.name}</h3>
+                <div className="relative mt-0.5 text-sm text-charcoal/70">{c.owner_id === app.user.id ? `${m.length} student${m.length === 1 ? '' : 's'}` : teacher?.full_name || c.subject}</div>
+                <div className="relative mt-8"><span className="inline-flex h-7 items-center rounded-full bg-white/70 px-3 text-xs font-semibold text-charcoal">{due ? `${due} due` : 'Up to date'}</span></div>
               </Link>
             );
           })}
@@ -80,6 +76,27 @@ export default function Classes() {
         action={isTeacher ? <Button onClick={() => setEdit({})}><Plus /> Create classroom</Button> : <Button onClick={() => setJoin(true)}><KeyRound /> Join with code</Button>} />}
       {edit && <ClassroomDialog initial={edit} onClose={() => setEdit(null)} onSaved={(id) => nav(`/app/classes/${id}`)} />}
       <JoinClassDialog open={join} onOpenChange={setJoin} />
+    </div>
+  );
+}
+
+function JoinCard() {
+  const app = useApp();
+  const nav = useNavigate();
+  const [c, setC] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
+  const go = async () => {
+    setErr(''); setBusy(true);
+    try { const cid = await joinByCode(app.user, c); app.toast('You’ve joined the classroom'); setC(''); nav(`/app/classes/${cid}`); }
+    catch (e: any) { setErr(e.message || 'Could not join'); } finally { setBusy(false); }
+  };
+  return (
+    <div className="rounded-3xl bg-card p-4 ring-1 ring-border">
+      <div className="mb-2 text-sm font-semibold">Join a class</div>
+      <div className="flex gap-2">
+        <Input className="h-12 flex-1 rounded-2xl font-mono uppercase tracking-[.2em]" maxLength={10} value={c} onChange={(e) => setC(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && c.trim().length >= 5 && go()} placeholder="Class code" aria-label="Class code" />
+        <Button size="lg" disabled={busy || c.trim().length < 5} onClick={go}>Join</Button>
+      </div>
+      {err && <p className="mt-2 text-sm text-red-600">{err}</p>}
     </div>
   );
 }
@@ -161,7 +178,7 @@ export function ClassroomDetail() {
   const { rows: links } = useTable<ResourceLink>('resource_links');
   const { rows: events } = useTable<CalendarEvent>('calendar_events', { classroom_id: id }, { col: 'starts_at', asc: true });
   const { rows: invites } = useTable<Invitation>('invitations', { classroom_id: id });
-  const [tab, setTab] = useState('stream');
+  const [tab, setTab] = useState(app.user.role === 'educator' ? 'stream' : 'assignments');
   const [post, setPost] = useState('');
   const [pick, setPick] = useState(false);
   const [newAsg, setNewAsg] = useState(false);
@@ -197,8 +214,8 @@ export function ClassroomDetail() {
     <div className="animate-fade-up">
       <button onClick={() => nav('/app/classes')} className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" /> My Classes</button>
       <div className="relative mb-6 overflow-hidden rounded-[24px] border border-border">
-        <ClassCover c={c} className="h-40 sm:h-48" />
-        <div className="absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 bg-gradient-to-t from-black/45 to-transparent p-5 text-white sm:p-6">
+        <ClassCover c={c} className="h-36 sm:h-44" />
+        <div className={cn("absolute inset-x-0 bottom-0 flex flex-wrap items-end justify-between gap-3 p-5 sm:p-6", c.cover_path ? "bg-gradient-to-t from-black/45 to-transparent text-white" : "text-charcoal")}>
           <div><div className="text-xs font-medium opacity-90">{c.subject}</div><h1 className="text-2xl font-bold">{c.name}</h1><div className="mt-1 flex items-center gap-2 text-xs opacity-90">{educator && <><Avatar name={educator.full_name} color={educator.avatar_color} size={20} /> {educator.full_name}</>}</div></div>
           {teacher && <div className="flex flex-wrap gap-2">
             <Button size="sm" variant="secondary" onClick={() => setInvite(true)}><UserPlus /> Invite</Button>
@@ -208,10 +225,10 @@ export function ClassroomDetail() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="stream"><Megaphone className="size-3.5" /> Announcements</TabsTrigger>
+        <TabsList className="max-w-full overflow-x-auto">
+          <TabsTrigger value="assignments"><ClipboardCheck className="size-3.5" /> To do</TabsTrigger>
           <TabsTrigger value="materials"><FolderOpen className="size-3.5" /> Materials</TabsTrigger>
-          <TabsTrigger value="assignments"><ClipboardCheck className="size-3.5" /> Assignments</TabsTrigger>
+          <TabsTrigger value="stream"><Megaphone className="size-3.5" /> Updates</TabsTrigger>
           <TabsTrigger value="feedback"><MessageSquareQuote className="size-3.5" /> Feedback</TabsTrigger>
           <TabsTrigger value="calendar"><CalendarDays className="size-3.5" /> Calendar</TabsTrigger>
           <TabsTrigger value="people"><Users className="size-3.5" /> {teacher ? 'Students & progress' : 'Progress'}</TabsTrigger>
@@ -260,7 +277,7 @@ export function ClassroomDetail() {
                 <Link key={a.id} to={`/app/assignments/${a.id}`} className="flex items-center gap-3 p-4 hover:bg-muted/50">
                   <span className="grid h-10 w-10 place-items-center rounded-xl bg-secondary"><ClipboardCheck className="size-4" /></span>
                   <div className="min-w-0 flex-1"><div className="truncate font-medium">{a.title}</div><div className="text-xs text-muted-foreground">Due {fmtDateTime(a.due_at)}{a.assignee_ids.length ? ` · ${a.assignee_ids.length} selected student${a.assignee_ids.length > 1 ? 's' : ''}` : ''}</div></div>
-                  {st ? <Badge tone={STATUS_TONE[st]}>{STATUS_LABEL[st]}</Badge> : <span className="text-xs text-muted-foreground">{done}/{target} submitted</span>}
+                  {a.max_points ? <span className="hidden text-xs text-muted-foreground sm:block">{a.max_points} pts</span> : null}{st ? <Badge tone={STATUS_TONE[st]}>{st === 'assigned' ? `Due ${fmtDate(a.due_at)}` : STATUS_LABEL[st]}</Badge> : <span className="text-xs text-muted-foreground">{done}/{target} submitted</span>}
                 </Link>
               );
             })}

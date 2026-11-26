@@ -57,7 +57,9 @@ export default function Landing() {
   ];
 
   return (
-    <div className="min-h-[100dvh] bg-background text-foreground">
+    <>
+    <MobileWelcome />
+    <div className="hidden min-h-[100dvh] bg-background text-foreground md:block">
       <header className="sticky top-0 z-40 border-b border-border/60 bg-background/85 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-5">
           <Link to="/" aria-label="Notevia"><Lockup size={32} /></Link>
@@ -177,6 +179,27 @@ export default function Landing() {
       </section>
 
       <SiteFooter />
+    </div>
+    </>
+  );
+}
+
+/** Tutor design: phone welcome screen — soft circles, logo, tagline and two buttons. */
+function MobileWelcome() {
+  return (
+    <div className="relative flex min-h-[100dvh] flex-col items-center justify-between overflow-hidden bg-background px-6 pb-[calc(2rem+env(safe-area-inset-bottom))] pt-24 md:hidden">
+      <div className="pointer-events-none absolute -left-24 -top-24 h-72 w-72 rounded-full bg-[#E6DFF5]" />
+      <div className="pointer-events-none absolute -right-20 top-40 h-56 w-56 rounded-full bg-[#C3D9CB]/70" />
+      <div className="pointer-events-none absolute -bottom-24 -left-10 h-64 w-64 rounded-full bg-[#EBD0D8]/70" />
+      <div className="relative flex flex-col items-center text-center">
+        <Mark size={84} />
+        <h1 className="mt-6 text-4xl font-bold tracking-tight">Notevia</h1>
+        <p className="mt-2 text-base text-muted-foreground">One space. Endless learning.</p>
+      </div>
+      <div className="relative w-full max-w-sm space-y-3">
+        <Button asChild size="lg" className="w-full"><Link to="/register">Get started</Link></Button>
+        <Button asChild size="lg" variant="ghost" className="w-full"><Link to="/login">I already have an account</Link></Button>
+      </div>
     </div>
   );
 }

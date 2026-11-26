@@ -36,11 +36,11 @@ function TB({ active, title, onClick, children, disabled }: { active?: boolean; 
     <Tooltip content={title}>
       <button type="button" aria-label={title} aria-pressed={active} onClick={onClick} disabled={disabled}
         className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl transition disabled:opacity-35 [&_svg]:size-[18px]',
-          active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-foreground/70 hover:bg-muted hover:text-foreground')}>{children}</button>
+          active ? 'bg-[#B9A5E8] text-charcoal shadow-sm' : 'text-white/75 hover:bg-white/10 hover:text-white')}>{children}</button>
     </Tooltip>
   );
 }
-const Sep = () => <span className="mx-1 h-6 w-px shrink-0 bg-border" />;
+const Sep = () => <span className="mx-1 h-6 w-px shrink-0 bg-white/20" />;
 
 export function Toolbar(p: ToolbarProps) {
   const { tools, setTools } = p;
@@ -88,7 +88,7 @@ export function Toolbar(p: ToolbarProps) {
 
   return (
     <div className="flex flex-col gap-1.5" role="toolbar" aria-label="Notebook tools">
-      <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar rounded-2xl border border-border bg-card px-1.5 py-1.5 shadow-soft">
+      <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar rounded-[22px] bg-charcoal px-2 py-1.5 text-white shadow-lift">
         <TB title="Select & move (V)" active={t === 'select'} onClick={() => pick('select')}><MousePointer2 /></TB>
         <TB title="Lasso select (L)" active={t === 'lasso'} onClick={() => pick('lasso')}><Lasso /></TB>
         <TB title="Pan / scroll (H)" active={t === 'hand'} onClick={() => pick('hand')}><Hand /></TB>
@@ -119,14 +119,14 @@ export function Toolbar(p: ToolbarProps) {
         </ToolPop>
         <Popover>
           <PopoverTrigger asChild>
-            <button aria-label="Shapes" className={cn('flex h-9 shrink-0 items-center gap-0.5 rounded-xl px-2 [&_svg]:size-[18px]', t === 'shape' ? 'bg-primary text-primary-foreground' : 'text-foreground/70 hover:bg-muted')}>
+            <button aria-label="Shapes" className={cn('flex h-9 shrink-0 items-center gap-0.5 rounded-xl px-2 [&_svg]:size-[18px]', t === 'shape' ? 'bg-[#B9A5E8] text-charcoal' : 'text-white/75 hover:bg-white/10')}>
               <activeShape.icon /><ChevronDown className="!size-3" />
             </button>
           </PopoverTrigger>
           <PopoverContent className="grid w-64 grid-cols-4 gap-1 p-2">
             {SHAPES.map((s) => (
               <button key={s.id} title={s.label} aria-label={s.label} onClick={() => set({ tool: 'shape', shape: s.id })}
-                className={cn('grid h-11 place-items-center rounded-lg hover:bg-muted', tools.shape === s.id && t === 'shape' && 'bg-secondary')}><s.icon className="size-5" /></button>
+                className={cn('grid h-11 place-items-center rounded-lg hover:bg-white/10', tools.shape === s.id && t === 'shape' && 'bg-secondary')}><s.icon className="size-5" /></button>
             ))}
             <div className="col-span-4 mt-1 border-t border-border pt-2">
               <ColorPanel bare palette={INK} current={tools.shapeColor} onPick={(c) => (t === 'shape' ? applyColor(c) : set({ shapeColor: c, textColor: c }))}>
@@ -158,7 +158,7 @@ export function Toolbar(p: ToolbarProps) {
         {p.setZoom && <>
         <Sep />
         <TB title="Zoom out" onClick={() => p.setZoom!(Math.max(0.2, +((p.zoom ?? 1) - 0.1).toFixed(2)))}><ZoomOut /></TB>
-        <button className="w-12 shrink-0 rounded-lg py-1 text-center text-xs tabular-nums hover:bg-muted" title="Reset zoom" onClick={() => p.setZoom!(1)}>{Math.round((p.zoom ?? 1) * 100)}%</button>
+        <button className="w-12 shrink-0 rounded-lg py-1 text-center text-xs tabular-nums hover:bg-white/10" title="Reset zoom" onClick={() => p.setZoom!(1)}>{Math.round((p.zoom ?? 1) * 100)}%</button>
         <TB title="Zoom in" onClick={() => p.setZoom!(Math.min(4, +((p.zoom ?? 1) + 0.1).toFixed(2)))}><ZoomIn /></TB>
         </>}
         <div className="flex-1" />
