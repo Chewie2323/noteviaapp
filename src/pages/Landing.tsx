@@ -76,13 +76,14 @@ export default function Landing() {
         <div className="pointer-events-none absolute -left-40 top-60 h-[420px] w-[420px] rounded-full bg-sage/40 blur-3xl dark:bg-sage/5" />
         <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 pb-16 pt-14 lg:grid-cols-[1fr_1.15fr] lg:pt-20">
           <div className="animate-fade-up">
-            <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground"><Mark size={16} /> The digital workspace for learning and teaching</span>
-            <h1 className="text-4xl font-bold leading-[1.08] tracking-tight sm:text-5xl lg:text-6xl">One space.<br /><span className="text-lavender-deep">Endless learning.</span></h1>
-            <p className="mt-5 max-w-lg text-lg text-muted-foreground">Bring your notes, documents, teaching materials and ideas together in one beautifully designed digital workspace.</p>
+            <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground"><Mark size={16} /> A private learning workspace for students and educators</span>
+            <h1 className="text-4xl font-bold leading-[1.08] tracking-tight sm:text-5xl lg:text-[3.25rem]">Your notes, materials and feedback — <span className="text-lavender-deep">together in one private workspace.</span></h1>
+            <p className="mt-5 max-w-lg text-lg text-muted-foreground">Handwrite notes, mark up PDFs, and run classes with assignments and feedback. Everything stays private unless you choose to share it.</p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild size="lg"><Link to="/register">Get started — it’s free <ArrowRight /></Link></Button>
               <Button asChild size="lg" variant="outline"><Link to="/login">Sign in</Link></Button>
             </div>
+            <p className="mt-3 text-xs text-muted-foreground">Free plan with 1 GB of storage. No payment details needed to sign up.</p>
             <form className="mt-6 flex max-w-sm gap-2" onSubmit={(e) => { e.preventDefault(); const c = joinCode.trim().toUpperCase().replace(/[^A-Z0-9]/g, ''); if (c.length >= 5) navigate(`/join/${c}`); }}>
               <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} maxLength={10} aria-label="Classroom code" placeholder="Have a classroom code?" className="h-11 flex-1 rounded-xl border border-border bg-card px-4 text-sm uppercase tracking-widest placeholder:normal-case placeholder:tracking-normal focus:outline-none focus:ring-2 focus:ring-lavender/40" />
               <Button type="submit" variant="secondary" size="lg" disabled={joinCode.trim().length < 5}>Join</Button>
@@ -131,6 +132,24 @@ export default function Landing() {
               <div className="flex items-center gap-2 text-xs"><Lock className="size-3.5 text-lavender-deep" /> Private by default · shared on your terms</div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <section id="how" className="mx-auto max-w-6xl px-5 py-16">
+        <h2 className="text-center text-3xl font-bold tracking-tight">How Notevia works</h2>
+        <p className="mx-auto mt-2 max-w-xl text-center text-muted-foreground">Four things you can do on day one.</p>
+        <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { t: 'Write by hand', d: 'Pick your paper, then write with a stylus or finger. Pens, highlighter, eraser and lasso.', c: '#E6DFF5', icon: NotebookPen, art: <div className="space-y-2.5 p-4">{[70, 90, 55, 80].map((w, i) => <div key={i} className="h-1.5 rounded-full bg-[#7C6FD1]/40" style={{ width: `${w}%` }} />)}</div> },
+            { t: 'Mark up PDFs', d: 'Highlight, underline and comment. Your original file is always kept safe.', c: '#F6DDE4', icon: FileText, art: <div className="space-y-2 p-4">{[90, 75, 85].map((w, i) => <div key={i} className="h-1.5 rounded-full bg-charcoal/20" style={{ width: `${w}%`, background: i === 1 ? '#FFE88A' : undefined }} />)}</div> },
+            { t: 'Run a class', d: 'Share materials, set assignments, hand in work and return feedback in one place.', c: '#C3D9CB', icon: GraduationCap, art: <div className="space-y-2 p-4"><div className="flex items-center justify-between rounded-lg bg-white/70 px-2.5 py-1.5 text-[10px] font-medium text-charcoal">Label a plant cell<span className="rounded-full bg-white px-1.5">Due Fri</span></div><div className="rounded-lg bg-white/70 px-2.5 py-1.5 text-[10px] text-charcoal/70">✓ Microscope quiz · 8/10</div></div> },
+            { t: 'Study smarter', d: 'Turn notes into flashcards and quizzes, with split-screen so notes sit beside the source.', c: '#CBD8EC', icon: Layers, art: <div className="grid place-items-center p-4"><div className="rounded-xl bg-white/80 px-5 py-3 text-xs font-semibold text-charcoal shadow-soft">What does the nucleus do?</div></div> },
+          ].map((x) => (
+            <div key={x.t} className="overflow-hidden rounded-3xl border border-border bg-card">
+              <div className="h-32" style={{ background: x.c }}>{x.art}</div>
+              <div className="p-5"><div className="flex items-center gap-2 font-semibold"><x.icon className="size-4 text-lavender-deep" />{x.t}</div><p className="mt-1.5 text-sm text-muted-foreground">{x.d}</p></div>
+            </div>
+          ))}
         </div>
       </section>
 
