@@ -19,6 +19,9 @@ import Assignments, { AssignmentDetail } from '@/pages/Assignments';
 import Calendar from '@/pages/Calendar';
 import { SharedWithMe, Favourites, Downloads, RecycleBin, SettingsPage } from '@/pages/Personal';
 import Admin from '@/pages/Admin';
+import Notes from '@/pages/Notes';
+import SearchPage from '@/pages/SearchPage';
+import Me from '@/pages/Me';
 import Study, { StudyDeck } from '@/pages/Study';
 
 const NotebookEditor = lazy(() => import('@/pages/NotebookEditor'));
@@ -75,6 +78,9 @@ function Inner() {
       <Route path="/contact" element={<Contact />} />
       <Route path="/app" element={<RequireAuth user={user} />}>
         <Route index element={<Home />} />
+        <Route path="notes" element={<Notes />} />
+        <Route path="search" element={<SearchPage />} />
+        <Route path="me" element={<Me />} />
         <Route path="workspace" element={<Workspace />} />
         <Route path="notebooks" element={<Notebooks />} />
         <Route path="notebooks/:id" element={<NotebookEditor />} />

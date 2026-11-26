@@ -5,7 +5,7 @@
 @layer base {
   :root {
     /* Notevia design: soft lilac canvas, violet primary, pastel tiles. */
-    --background: 260 50% 98%;
+    --background: 46 33% 95%;
     --foreground: 249 23% 22%;
     --card: 0 0% 100%;
     --card-foreground: 249 23% 22%;
@@ -15,13 +15,13 @@
     --primary-foreground: 0 0% 100%;
     --secondary: 254 79% 93%;
     --secondary-foreground: 248 43% 43%;
-    --muted: 256 52% 96%;
+    --muted: 44 22% 92%;
     --muted-foreground: 250 13% 46%;
     --accent: 254 79% 93%;
     --accent-foreground: 249 23% 22%;
     --destructive: 351 48% 53%;
     --destructive-foreground: 0 0% 100%;
-    --border: 256 37% 92%;
+    --border: 42 18% 88%;
     --input: 254 34% 87%;
     --ring: 248 52% 63%;
     --radius: 1rem;
